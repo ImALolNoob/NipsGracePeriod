@@ -1,8 +1,22 @@
 name: NovatoBar
-main: org.novatoBar.NovatoBar
+main: org.novato.NovatoBar
 version: 1.1-SNAPSHOT
 commands:
   timer:
     description: Manage the timer boss bar
     usage: "/timer <start | set | stop> [seconds], Alias /t "
     aliases: [t]
+
+permissions:
+  novato.timer.start:
+    description: Allows starting the timer
+    default: op
+  novato.timer.set:
+    description: Allows setting the timer
+    default: op
+  novato.timer.stop:
+    description: Allows stopping the timer
+    default: op
+  novato.timer.config:
+    description: Allows viewing the timer configuration
+    default: op

@@ -11,3 +11,11 @@ timerEnded: false
 
 # Indicates if the timer is currently active
 timerActive: true
+
+
+permissions:
+  timer:
+    start: "novato.timer.start"
+    set: "novato.timer.set"
+    stop: "novato.timer.stop"
+    config: "novato.timer.config"

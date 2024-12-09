@@ -1,5 +1,6 @@
 package org.novato;
 
+import org.bukkit.Location;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
@@ -56,7 +57,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         getConfig().set("timerActive", timerActive);
         getConfig().set("lastSavedTimestamp", System.currentTimeMillis());
         saveConfig();
-        //getLogger().info("Timer state saved: remainingTime=" + remainingTime + ", timerActive=" + timerActive);
     }
 
     private void loadTimerState() {
@@ -88,6 +88,13 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                 sender.sendMessage("Usage: /timer <start|set|stop|config>");
                 return true;
             }
+
+            String permission = plugin.getConfig().getString("permissions.timer." + args[0].toLowerCase());
+            if (permission != null && !sender.hasPermission(permission)) {
+                sender.sendMessage("You do not have permission to execute this command.");
+                return true;
+            }
+
             switch (args[0].toLowerCase()) {
                 case "start":
                     if (plugin.originalTime > 0) {
@@ -132,6 +139,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
             }
             return true;
         }
+
     }
 
     @EventHandler
@@ -146,8 +154,18 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         Player player = event.getEntity();
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (!timerEnded) {
-                player.spigot().respawn();
-                player.sendMessage("You have respawned as the timer is still running.");
+                Location bedLocation = player.getBedSpawnLocation();
+                if (bedLocation != null) {
+                    player.spigot().respawn();
+                    player.teleport(bedLocation);
+                    player.sendMessage("You have respawned at your bed as the timer is still running.");
+                } else {
+                    Location spawnLocation = player.getWorld().getSpawnLocation();
+                    player.spigot().respawn();
+                    player.teleport(spawnLocation);
+                    player.sendMessage("No bed found! You have respawned at the world spawn as the timer is still running.");
+                }
+
             } else {
                 player.setGameMode(org.bukkit.GameMode.SPECTATOR);
                 player.sendMessage("The timer has ended. You are now in spectator mode.");
@@ -240,7 +258,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                 }
             }
         }, 0L, 20L); // Runs every 20 ticks (1 second)
-        // Runs every 20 ticks (1 second)
     }
 
     private void sendTitleAndSound(String time, String message, String sound) {

@@ -46,7 +46,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
     }
 
     private void createBar() {
-        bar = Bukkit.createBossBar("Timer not set", BarColor.GREEN, BarStyle.SOLID);
+        bar = Bukkit.createBossBar("Timer not set", BarColor.PURPLE, BarStyle.SOLID);
         bar.setVisible(false);
     }
 

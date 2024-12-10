@@ -159,18 +159,18 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                     event.setCancelled(true);// Cancel the death event
                     player.spigot().respawn();
                     player.teleport(bedLocation);
-                    player.sendMessage("You have respawned at your bed as the timer is still running.");
+                    player.sendMessage("§6You have §arespawned §6at your bed as the timer is still running.");
                 } else {
                     event.setCancelled(true);// Cancel the death event
                     Location spawnLocation = player.getWorld().getSpawnLocation();
                     player.spigot().respawn();
                     player.teleport(spawnLocation);
-                    player.sendMessage("No bed found! You have respawned at the world spawn as the timer is still running.");
+                    player.sendMessage("§6No bed found! You have §arespawned §6at the world spawn as the timer is still running.");
                 }
 
             } else {
                 player.setGameMode(org.bukkit.GameMode.SPECTATOR);
-                player.sendMessage("The timer has ended. You are now in spectator mode.");
+                player.sendMessage("§6The timer has §5ended§6. You are now in §aspectator §6mode.");
             }
         }, 1L);
     }
@@ -250,7 +250,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                     seconds--;
                 } else {
                     // Handle the 0-second mark
-                    Bukkit.broadcastMessage("Hardcore Mode Enabled! Death is now permanent.");
+                    Bukkit.broadcastMessage("§5Hardcore Mode Enabled! §4Death §6is now permanent.");
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a times 40 80 40");
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a subtitle [\"\",{\"text\":\"Death\",\"bold\":true,\"color\":\"dark_red\"},{\"text\":\" Is Now Permanent\",\"color\":\"gold\"}]");
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a title {\"text\":\"Hardcore Mode Enabled...\",\"bold\":true,\"color\":\"dark_purple\"}");

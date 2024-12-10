@@ -156,10 +156,12 @@ public final class NovatoBar extends JavaPlugin implements Listener {
             if (!timerEnded) {
                 Location bedLocation = player.getBedSpawnLocation();
                 if (bedLocation != null) {
+                    event.setCancelled(true);// Cancel the death event
                     player.spigot().respawn();
                     player.teleport(bedLocation);
                     player.sendMessage("You have respawned at your bed as the timer is still running.");
                 } else {
+                    event.setCancelled(true);// Cancel the death event
                     Location spawnLocation = player.getWorld().getSpawnLocation();
                     player.spigot().respawn();
                     player.teleport(spawnLocation);

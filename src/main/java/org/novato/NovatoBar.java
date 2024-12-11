@@ -27,11 +27,11 @@ public final class NovatoBar extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
         createBar();
         loadTimerState();
         getCommand("timer").setExecutor(new TimerCommand(this));
         Bukkit.getPluginManager().registerEvents(this, this);
-        Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
         getLogger().info("NovatoBar enabled");
 
         // Resume timer if it was active before shutdown
@@ -48,31 +48,31 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         saveTimerState(); // Save remaining time on shutdown
         getLogger().info("NovatoBar disabled");
     }
-    @EventHandler
-    public void onPlayerDeath(PlayerDeathEvent event) {
-        Player player = event.getEntity();
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (!timerEnded) {
-                Location bedLocation = player.getBedSpawnLocation();
-                if (bedLocation != null) {
-                    event.setCancelled(true);// Cancel the death event
-                    player.spigot().respawn();
-                    player.teleport(bedLocation);
-                    player.sendMessage("§6You have §arespawned §6at your bed as the timer is still running.");
-                } else {
-                    event.setCancelled(true);// Cancel the death event
-                    Location spawnLocation = player.getWorld().getSpawnLocation();
-                    player.spigot().respawn();
-                    player.teleport(spawnLocation);
-                    player.sendMessage("§6No bed found! You have §arespawned §6at the world spawn as the timer is still running.");
-                }
-
-            } else {
-                player.setGameMode(org.bukkit.GameMode.SPECTATOR);
-                player.sendMessage("§6The timer has §5ended§6. You are now in §aspectator §6mode.");
-            }
-        }, 1L);
-    }
+//    @EventHandler
+//    public void onPlayerDeath(PlayerDeathEvent event) {
+//        Player player = event.getEntity();
+//
+//            if (!timerEnded) {
+//                Location bedLocation = player.getBedSpawnLocation();
+//                if (bedLocation != null) {
+//                    event.setCancelled(true);// Cancel the death event
+//                    player.spigot().respawn();
+//                    player.teleport(bedLocation);
+//                    player.sendMessage("§6You have §arespawned §6at your bed as the timer is still running.");
+//                } else {
+//                    event.setCancelled(true);// Cancel the death event
+//                    Location spawnLocation = player.getWorld().getSpawnLocation();
+//                    player.spigot().respawn();
+//                    player.teleport(spawnLocation);
+//                    player.sendMessage("§6No bed found! You have §arespawned §6at the world spawn as the timer is still running.");
+//                }
+//
+//            } else {
+//                player.setGameMode(org.bukkit.GameMode.SPECTATOR);
+//                player.sendMessage("§6The timer has §5ended§6. You are now in §aspectator §6mode.");
+//            }
+//        },1L);
+//    }
     private void createBar() {
         bar = Bukkit.createBossBar("Timer not set", BarColor.PURPLE, BarStyle.SOLID);
         bar.setVisible(false);

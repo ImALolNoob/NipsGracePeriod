@@ -29,6 +29,9 @@ public final class NovatoBar extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        // Save the default config if it doesn't exist
+        saveDefaultConfig();
+
         tabBar = new tabbar(this);
         createBar();
         loadTimerState();
@@ -73,7 +76,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         getConfig().set("timerEnded", timerEnded);
         getConfig().set("timerActive", timerActive);
         getConfig().set("lastSavedTimestamp", System.currentTimeMillis());
-        getConfig().set("facteventStarted", "false");
         saveConfig();
     }
 
@@ -117,6 +119,8 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                 case "start":
                     if (plugin.originalTime > 0) {
                         plugin.startTimer(plugin.remainingTime > 0 ? plugin.remainingTime : plugin.originalTime, sender);
+                        getConfig().set("facteventStarted", 2);
+                        saveConfig();
                     } else {
                         sender.sendMessage("Please set the time first using /timer set [seconds].");
                     }
@@ -232,8 +236,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                             sendTitleAndSound("10", "Seconds Remaining...", "minecraft:entity.player.levelup");
                         case 9: case 8: case 7: case 6: case 5: case 4: case 3: case 2: case 1:
                             Bukkit.broadcastMessage("§5§l" + seconds + " §6seconds remaining!");
-                            getConfig().set("facteventStarted", "true");
-                            saveConfig();
                             break;
                     }
 
@@ -244,6 +246,8 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                     seconds--;
                 } else {
                     // Handle the 0-second mark
+                    getConfig().set("facteventStarted", 3);
+                    saveConfig();
                     Bukkit.broadcastMessage("§5Hardcore Mode Enabled! §4Death §6is now permanent.");
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a times 40 80 40");
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a subtitle [\"\",{\"text\":\"Death\",\"bold\":true,\"color\":\"dark_red\"},{\"text\":\" Is Now Permanent\",\"color\":\"gold\"}]");

@@ -48,7 +48,31 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         saveTimerState(); // Save remaining time on shutdown
         getLogger().info("NovatoBar disabled");
     }
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (!timerEnded) {
+                Location bedLocation = player.getBedSpawnLocation();
+                if (bedLocation != null) {
+                    event.setCancelled(true);// Cancel the death event
+                    player.spigot().respawn();
+                    player.teleport(bedLocation);
+                    player.sendMessage("§6You have §arespawned §6at your bed as the timer is still running.");
+                } else {
+                    event.setCancelled(true);// Cancel the death event
+                    Location spawnLocation = player.getWorld().getSpawnLocation();
+                    player.spigot().respawn();
+                    player.teleport(spawnLocation);
+                    player.sendMessage("§6No bed found! You have §arespawned §6at the world spawn as the timer is still running.");
+                }
 
+            } else {
+                player.setGameMode(org.bukkit.GameMode.SPECTATOR);
+                player.sendMessage("§6The timer has §5ended§6. You are now in §aspectator §6mode.");
+            }
+        }, 1L);
+    }
     private void createBar() {
         bar = Bukkit.createBossBar("Timer not set", BarColor.PURPLE, BarStyle.SOLID);
         bar.setVisible(false);
@@ -153,32 +177,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         }
     }
 
-    @EventHandler
-    public void onPlayerDeath(PlayerDeathEvent event) {
-        Player player = event.getEntity();
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (!timerEnded) {
-                Location bedLocation = player.getBedSpawnLocation();
-                if (bedLocation != null) {
-                    event.setCancelled(true);// Cancel the death event
-                    player.spigot().respawn();
-                    player.teleport(bedLocation);
-                    player.sendMessage("You have respawned at your bed as the timer is still running.");
-                } else {
-                    event.setCancelled(true);// Cancel the death event
-                    Location spawnLocation = player.getWorld().getSpawnLocation();
-                    player.spigot().respawn();
-                    player.teleport(spawnLocation);
-                    player.sendMessage("No bed found! You have respawned at the world spawn as the timer is still running.");
-                }
-
-            } else {
-                player.setGameMode(org.bukkit.GameMode.SPECTATOR);
-                player.sendMessage("The timer has ended. You are now in spectator mode.");
-            }
-        }, 1L);
-    }
-
     public void startTimer(int secondsInput, CommandSender sender) {
         if (secondsInput <= 0) {
             if (sender != null) {
@@ -212,31 +210,31 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                     // Handle alerts for specific time intervals
                     switch (seconds) {
                         case 10800:
-                            Bukkit.broadcastMessage("3 hours remaining!");
+                            Bukkit.broadcastMessage("§53 §6hours remaining!");
                             sendTitleAndSound("3", "Hours Remaining...", "minecraft:entity.player.levelup");
                             break;
                         case 3600:
-                            Bukkit.broadcastMessage("1 hour remaining!");
+                            Bukkit.broadcastMessage("§51 §6hour remaining!");
                             sendTitleAndSound("1", "Hour Remaining...", "minecraft:entity.player.levelup");
                             break;
                         case 1800:
-                            Bukkit.broadcastMessage("30 minutes remaining!");
+                            Bukkit.broadcastMessage("§530 §6minutes remaining!");
                             sendTitleAndSound("30", "Minutes Remaining...", "minecraft:entity.player.levelup");
                             break;
                         case 600:
-                            Bukkit.broadcastMessage("10 minutes remaining!");
+                            Bukkit.broadcastMessage("§510 §6minutes remaining!");
                             sendTitleAndSound("10", "Minutes Remaining...", "minecraft:entity.player.levelup");
                             break;
                         case 300:
-                            Bukkit.broadcastMessage("5 minutes remaining!");
+                            Bukkit.broadcastMessage("§55 §6minutes remaining!");
                             sendTitleAndSound("5", "Minutes Remaining...", "minecraft:entity.player.levelup");
                             break;
                         case 60:
-                            Bukkit.broadcastMessage("1 minute remaining!");
+                            Bukkit.broadcastMessage("§51 §6minute remaining!");
                             sendTitleAndSound("1", "Minute Remaining...", "minecraft:entity.player.levelup");
                             break;
                         case 30:
-                            Bukkit.broadcastMessage("30 seconds remaining!");
+                            Bukkit.broadcastMessage("§530 §6seconds remaining!");
                             sendTitleAndSound("30", "Seconds Remaining...", "minecraft:entity.player.levelup");
                             break;
                         case 10:
@@ -254,7 +252,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                     seconds--;
                 } else {
                     // Handle the 0-second mark
-                    Bukkit.broadcastMessage("Hardcore Mode Enabled! Death is now permanent.");
+                    Bukkit.broadcastMessage("§5Hardcore Mode Enabled! §4Death §6is now permanent.");
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a times 40 80 40");
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a subtitle [\"\",{\"text\":\"Death\",\"bold\":true,\"color\":\"dark_red\"},{\"text\":\" Is Now Permanent\",\"color\":\"gold\"}]");
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a title {\"text\":\"Hardcore Mode Enabled...\",\"bold\":true,\"color\":\"dark_purple\"}");

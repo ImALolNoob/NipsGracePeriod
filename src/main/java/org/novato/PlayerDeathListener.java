@@ -18,7 +18,6 @@ public class PlayerDeathListener implements Listener {
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (!((NovatoBar) plugin).isTimerEnded()) {
                 Location bedLocation = player.getBedSpawnLocation();
                 if (bedLocation != null) {
@@ -37,6 +36,5 @@ public class PlayerDeathListener implements Listener {
                 player.setGameMode(org.bukkit.GameMode.SPECTATOR);
                 player.sendMessage("The timer has ended. You are now in spectator mode.");
             }
-        }, 1L);
     }
 }

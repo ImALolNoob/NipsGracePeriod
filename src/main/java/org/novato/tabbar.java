@@ -20,7 +20,7 @@ public class tabbar {
             String header = "§6server status: §aEvent is running";
             String footer = "§7server is running";
             player.setPlayerListHeaderFooter(header, footer);
-        } if (plugin.getConfig().getBoolean("timerEnded") == true) {
+        } if (plugin.getConfig().getBoolean("facteventStarted") == true) {
             String header = "this is after the timer is ended";
             String footer = "Hardcore Event is running";
             player.setPlayerListHeaderFooter(header, footer);

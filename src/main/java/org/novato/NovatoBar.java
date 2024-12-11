@@ -52,9 +52,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         }
     }
 
-    private void updateTabMenu(Player player) {
-    }
-
     public boolean isTimerEnded() {
         return timerEnded;
     }
@@ -76,6 +73,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         getConfig().set("timerEnded", timerEnded);
         getConfig().set("timerActive", timerActive);
         getConfig().set("lastSavedTimestamp", System.currentTimeMillis());
+        getConfig().set("facteventStarted", "false");
         saveConfig();
     }
 
@@ -234,6 +232,8 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                             sendTitleAndSound("10", "Seconds Remaining...", "minecraft:entity.player.levelup");
                         case 9: case 8: case 7: case 6: case 5: case 4: case 3: case 2: case 1:
                             Bukkit.broadcastMessage("§5§l" + seconds + " §6seconds remaining!");
+                            getConfig().set("facteventStarted", "true");
+                            saveConfig();
                             break;
                     }
 

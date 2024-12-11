@@ -1,6 +1,6 @@
 package org.novato;
 
-import org.bukkit.Location;
+
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
@@ -10,10 +10,11 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.PlayerDeathEvent;
+
 import org.bukkit.event.player.PlayerJoinEvent;
 
 public final class NovatoBar extends JavaPlugin implements Listener {
@@ -24,24 +25,40 @@ public final class NovatoBar extends JavaPlugin implements Listener {
     private int remainingTime = 0;
     private boolean timerEnded = false;
     private boolean timerActive = false;
+    private tabbar tabBar;
 
     @Override
     public void onEnable() {
-        Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
+        tabBar = new tabbar(this);
         createBar();
         loadTimerState();
         getCommand("timer").setExecutor(new TimerCommand(this));
-        Bukkit.getPluginManager().registerEvents(this, this);
+        Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
         getLogger().info("NovatoBar enabled");
+
+        // Schedule a repeating task to update the tab menu for all players
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    tabBar.updateTabMenu(player);
+                }
+            }
+        }.runTaskTimer(this, 0L, 20L); // Update every second (20 ticks)
 
         // Resume timer if it was active before shutdown
         if (timerActive && remainingTime > 0) {
             startTimer(remainingTime, null);
         }
     }
+
+    private void updateTabMenu(Player player) {
+    }
+
     public boolean isTimerEnded() {
         return timerEnded;
     }
+
 
     @Override
     public void onDisable() {

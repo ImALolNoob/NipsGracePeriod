@@ -31,12 +31,16 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         loadTimerState();
         getCommand("timer").setExecutor(new TimerCommand(this));
         Bukkit.getPluginManager().registerEvents(this, this);
+        Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
         getLogger().info("NovatoBar enabled");
 
         // Resume timer if it was active before shutdown
         if (timerActive && remainingTime > 0) {
             startTimer(remainingTime, null);
         }
+    }
+    public boolean isTimerEnded() {
+        return timerEnded;
     }
 
     @Override

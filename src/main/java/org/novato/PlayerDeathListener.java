@@ -24,17 +24,17 @@ public class PlayerDeathListener implements Listener {
                     event.setCancelled(true); // Cancel the death event
                     player.spigot().respawn();
                     player.teleport(bedLocation);
-                    player.sendMessage("You have respawned at your bed as the timer is still running.");
+                    player.sendMessage("§6You have §arespawned §6at your bed as the timer is still running.");
                 } else {
                     event.setCancelled(true); // Cancel the death event
                     Location spawnLocation = player.getWorld().getSpawnLocation();
                     player.spigot().respawn();
                     player.teleport(spawnLocation);
-                    player.sendMessage("No bed found! You have respawned at the world spawn as the timer is still running.");
+                    player.sendMessage("§5No bed found! §6You have §arespawned §6at the world spawn as the timer is still running.");
                 }
             } else {
                 player.setGameMode(org.bukkit.GameMode.SPECTATOR);
-                player.sendMessage("The timer has ended. You are now in spectator mode.");
+                player.sendMessage("§6The timer has §4ended§6. You are now in §aspectator mode§6.");
             }
     }
 }

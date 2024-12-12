@@ -14,7 +14,6 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-
 import org.bukkit.event.player.PlayerJoinEvent;
 
 public final class NovatoBar extends JavaPlugin implements Listener {
@@ -25,14 +24,14 @@ public final class NovatoBar extends JavaPlugin implements Listener {
     private int remainingTime = 0;
     private boolean timerEnded = false;
     private boolean timerActive = false;
-    private tabbar tabBar;
+    private TabManager tabBar;
 
     @Override
     public void onEnable() {
         // Save the default config if it doesn't exist
         saveDefaultConfig();
 
-        tabBar = new tabbar(this);
+        tabBar = new TabManager(this);
         createBar();
         loadTimerState();
         getCommand("timer").setExecutor(new TimerCommand(this));
@@ -80,10 +79,10 @@ public final class NovatoBar extends JavaPlugin implements Listener {
     }
 
     private void loadTimerState() {
-        remainingTime = getConfig().getInt("remainingTime", 0);
-        originalTime = getConfig().getInt("originalTime", 0);
-        timerEnded = getConfig().getBoolean("timerEnded", false);
-        timerActive = getConfig().getBoolean("timerActive", false);
+        remainingTime = getConfig().getInt("remainingTime");
+        originalTime = getConfig().getInt("originalTime");
+        timerEnded = getConfig().getBoolean("timerEnded");
+        timerActive = getConfig().getBoolean("timerActive");
 
         long currentTime = System.currentTimeMillis();
         long lastSaved = getConfig().getLong("lastSavedTimestamp", currentTime);
@@ -93,6 +92,10 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         if (remainingTime > originalTime) {
             remainingTime = originalTime; // Safety check
         }
+    }
+
+    public boolean isTimerActive() {
+        return timerActive;
     }
 
     class TimerCommand implements CommandExecutor {
@@ -166,10 +169,13 @@ public final class NovatoBar extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        if (bar.isVisible()) {
-            bar.addPlayer(event.getPlayer());
+        Player player = event.getPlayer();
+        if (timerActive && remainingTime > 0) {
+            bar.addPlayer(player);
+            updateBossBarTitle(remainingTime); // Sync title for the player
         }
     }
+
 
     public void startTimer(int secondsInput, CommandSender sender) {
         if (secondsInput <= 0) {
@@ -201,6 +207,9 @@ public final class NovatoBar extends JavaPlugin implements Listener {
             @Override
             public void run() {
                 if (seconds > 0) {
+                    for (Player player : Bukkit.getServer().getOnlinePlayers()) {
+                        bar.addPlayer(player); // Sync boss bar with all players
+                    }
                     // Handle alerts for specific time intervals
                     switch (seconds) {
                         case 10800:
@@ -239,10 +248,11 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                             break;
                     }
 
-                    updateBossBarTitle(seconds);
-                    bar.setProgress((double) seconds / originalTime);
-                    remainingTime = seconds;
-                    saveTimerState(); // Save the remaining time every second
+
+                    updateBossBarTitle(seconds); // Update the title for the timer
+                    bar.setProgress((double) seconds / originalTime); // Update progress
+                    remainingTime = seconds; // Save remaining time
+                    saveTimerState(); // Persist state
                     seconds--;
                 } else {
                     // Handle the 0-second mark

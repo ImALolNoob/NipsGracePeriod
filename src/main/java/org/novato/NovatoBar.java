@@ -65,7 +65,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         getLogger().info("NovatoBar disabled");
     }
     private void createBar() {
-        bar = Bukkit.createBossBar("Timer not set", BarColor.PURPLE, BarStyle.SOLID);
+        bar = Bukkit.createBossBar("Timer not set", BarColor.PURPLE, BarStyle.SEGMENTED_6);
         bar.setVisible(false);
     }
 
@@ -74,7 +74,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         getConfig().set("originalTime", originalTime);
         getConfig().set("timerEnded", timerEnded);
         getConfig().set("timerActive", timerActive);
-        getConfig().set("lastSavedTimestamp", System.currentTimeMillis());
+
         saveConfig();
     }
 
@@ -84,14 +84,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         timerEnded = getConfig().getBoolean("timerEnded");
         timerActive = getConfig().getBoolean("timerActive");
 
-        long currentTime = System.currentTimeMillis();
-        long lastSaved = getConfig().getLong("lastSavedTimestamp", currentTime);
-        long elapsed = (currentTime - lastSaved) / 1000; // Convert ms to seconds
-
-        remainingTime = Math.max(remainingTime - (int) elapsed, 0); // Adjust for elapsed time
-        if (remainingTime > originalTime) {
-            remainingTime = originalTime; // Safety check
-        }
     }
 
     public boolean isTimerActive() {
@@ -122,8 +114,8 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                 case "start":
                     if (plugin.originalTime > 0) {
                         plugin.startTimer(plugin.remainingTime > 0 ? plugin.remainingTime : plugin.originalTime, sender);
-                        getConfig().set("facteventStarted", 2);
-                        saveConfig();
+                        plugin.getConfig().set("facteventStarted", 2);
+                        plugin.saveConfig();
                     } else {
                         sender.sendMessage("Please set the time first using /timer set [seconds].");
                     }
@@ -151,6 +143,15 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                     plugin.stopTimer();
                     sender.sendMessage("Timer stopped.");
                     break;
+                case "resetfull":
+                    plugin.stopTimer(); // Stop any active timer
+                    plugin.originalTime = 6 * 3600; // 6 hours in seconds
+                    plugin.remainingTime = plugin.originalTime; // Reset remaining time
+                    plugin.timerEnded = false; // Reset timer status
+                    plugin.timerActive = false; // Set timer as inactive
+                    plugin.saveTimerState(); // Save the updated state
+                    sender.sendMessage("Timer fully reset to 6 hours and stopped.");
+                    break;
                 case "config":
                     sender.sendMessage("Config Values:");
                     sender.sendMessage("Remaining Time: " + plugin.remainingTime);
@@ -159,9 +160,10 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                     sender.sendMessage("Timer Active: " + plugin.timerActive);
                     break;
                 default:
-                    sender.sendMessage("Unknown command. Use /timer <start|set|stop|config>");
+                    sender.sendMessage("Unknown command. Use /timer <start|set|stop|config|resetfull>");
                     return true;
             }
+
             return true;
         }
 

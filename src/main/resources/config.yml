@@ -9,12 +9,8 @@ originalTime: 0
 # Indicates if the timer has ended
 timerEnded: false
 
-# Event started and is over
-facteventStarted: 1
-
-
 # Indicates if the timer is currently active
-timerActive: true
+timerActive: false
 
 
 permissions:

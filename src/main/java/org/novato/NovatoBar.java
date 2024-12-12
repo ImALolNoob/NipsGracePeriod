@@ -283,7 +283,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         int hours = time / 3600;
         int minutes = (time % 3600) / 60;
         int seconds = time % 60;
-        String timeStr = String.format("Time remaining: %02d:%02d:%02d", hours, minutes, seconds);
+        String timeStr = String.format("§6Time remaining: %02d:%02d:%02d", hours, minutes, seconds);
         bar.setTitle(timeStr);
     }
 

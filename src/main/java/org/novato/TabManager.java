@@ -22,8 +22,8 @@ public class TabManager implements Listener {
             player.setPlayerListHeaderFooter(header, footer);
         } else if (novatoBar.isTimerActive() && !novatoBar.isTimerEnded()) {
             // During the event
-            String header = "§6YOLOCRAFT SEASON 3";
-            String footer = "§7Hardcore mode: §2Disabled\n";
+            String header = "\n§6YOLOCRAFT SEASON 3";
+            String footer = "§7Hardcore mode: §2Disabled";
             player.setPlayerListHeaderFooter(header, footer);
         } else if (novatoBar.isTimerEnded()) {
             // After the timer ends

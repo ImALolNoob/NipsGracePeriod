@@ -100,7 +100,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         @Override
         public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
             if (args.length == 0) {
-                sender.sendMessage("Usage: /timer <start|set|stop|config>");
+                sender.sendMessage("Usage: /timer <start|set|stop|config|resetfull>");
                 return true;
             }
 
@@ -144,6 +144,10 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                     sender.sendMessage("Timer stopped.");
                     break;
                 case "resetfull":
+                    if (!sender.hasPermission("permissions.timer.resetfull")) {
+                        sender.sendMessage("You do not have permission to execute this command.");
+                        return true;
+                    }
                     plugin.stopTimer(); // Stop any active timer
                     plugin.originalTime = 6 * 3600; // 6 hours in seconds
                     plugin.remainingTime = plugin.originalTime; // Reset remaining time

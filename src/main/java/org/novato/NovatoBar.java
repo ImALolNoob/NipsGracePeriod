@@ -1,6 +1,5 @@
 package org.novato;
 
-
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
@@ -16,6 +15,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 
+import java.util.logging.Logger;
+
 public final class NovatoBar extends JavaPlugin implements Listener {
 
     private BossBar bar;
@@ -24,7 +25,9 @@ public final class NovatoBar extends JavaPlugin implements Listener {
     private int remainingTime = 0;
     private boolean timerEnded = false;
     private boolean timerActive = false;
+    private long startTimeMillis;
     private TabManager tabBar;
+    private Logger logger;
 
     @Override
     public void onEnable() {
@@ -37,6 +40,8 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         getCommand("timer").setExecutor(new TimerCommand(this));
         Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
         getLogger().info("NovatoBar enabled");
+
+        logger = getLogger();
 
         // Schedule a repeating task to update the tab menu for all players
         new BukkitRunnable() {
@@ -58,12 +63,12 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         return timerEnded;
     }
 
-
     @Override
     public void onDisable() {
         saveTimerState(); // Save remaining time on shutdown
         getLogger().info("NovatoBar disabled");
     }
+
     private void createBar() {
         bar = Bukkit.createBossBar("Timer not set", BarColor.PURPLE, BarStyle.SEGMENTED_6);
         bar.setVisible(false);
@@ -83,7 +88,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         originalTime = getConfig().getInt("originalTime");
         timerEnded = getConfig().getBoolean("timerEnded");
         timerActive = getConfig().getBoolean("timerActive");
-
     }
 
     public boolean isTimerActive() {
@@ -170,7 +174,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
 
             return true;
         }
-
     }
 
     @EventHandler
@@ -181,7 +184,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
             updateBossBarTitle(remainingTime); // Sync title for the player
         }
     }
-
 
     public void startTimer(int secondsInput, CommandSender sender) {
         if (secondsInput <= 0) {
@@ -205,61 +207,29 @@ public final class NovatoBar extends JavaPlugin implements Listener {
         remainingTime = secondsInput;
         timerEnded = false;
         timerActive = true;
+        startTimeMillis = System.currentTimeMillis();
         saveTimerState(); // Save timer state immediately
 
         taskID = Bukkit.getScheduler().scheduleSyncRepeatingTask(this, new Runnable() {
-            private int seconds = secondsInput;
-
             @Override
             public void run() {
-                if (seconds > 0) {
+                long elapsedMillis = System.currentTimeMillis() - startTimeMillis;
+                int elapsedSeconds = (int) (elapsedMillis / 1000);
+                int newRemainingTime = originalTime - elapsedSeconds;
+
+                if (newRemainingTime != remainingTime) {
+                    //logger.info("Adjusting remaining time from " + remainingTime + " to " + newRemainingTime);
+                    remainingTime = newRemainingTime;
+                }
+
+                if (remainingTime > 0) {
                     for (Player player : Bukkit.getServer().getOnlinePlayers()) {
                         bar.addPlayer(player); // Sync boss bar with all players
                     }
-                    // Handle alerts for specific time intervals
-                    switch (seconds) {
-                        case 10800:
-                            Bukkit.broadcastMessage("§53 §6hours remaining!");
-                            sendTitleAndSound("3", "Hours Remaining...", "minecraft:entity.player.levelup");
-                            break;
-                        case 3600:
-                            Bukkit.broadcastMessage("§51 §6hour remaining!");
-                            sendTitleAndSound("1", "Hour Remaining...", "minecraft:entity.player.levelup");
-                            break;
-                        case 1800:
-                            Bukkit.broadcastMessage("§530 §6minutes remaining!");
-                            sendTitleAndSound("30", "Minutes Remaining...", "minecraft:entity.player.levelup");
-                            break;
-                        case 600:
-                            Bukkit.broadcastMessage("§510 §6minutes remaining!");
-                            sendTitleAndSound("10", "Minutes Remaining...", "minecraft:entity.player.levelup");
-                            break;
-                        case 300:
-                            Bukkit.broadcastMessage("§55 §6minutes remaining!");
-                            sendTitleAndSound("5", "Minutes Remaining...", "minecraft:entity.player.levelup");
-                            break;
-                        case 60:
-                            Bukkit.broadcastMessage("§51 §6minute remaining!");
-                            sendTitleAndSound("1", "Minute Remaining...", "minecraft:entity.player.levelup");
-                            break;
-                        case 30:
-                            Bukkit.broadcastMessage("§530 §6seconds remaining!");
-                            sendTitleAndSound("30", "Seconds Remaining...", "minecraft:entity.player.levelup");
-                            break;
-                        case 10:
-                            Bukkit.broadcastMessage(seconds + " §6seconds remaining!");
-                            sendTitleAndSound("10", "Seconds Remaining...", "minecraft:entity.player.levelup");
-                        case 9: case 8: case 7: case 6: case 5: case 4: case 3: case 2: case 1:
-                            Bukkit.broadcastMessage("§5§l" + seconds + " §6seconds remaining!");
-                            break;
-                    }
 
-
-                    updateBossBarTitle(seconds); // Update the title for the timer
-                    bar.setProgress((double) seconds / originalTime); // Update progress
-                    remainingTime = seconds; // Save remaining time
+                    updateBossBarTitle(remainingTime); // Update the title for the timer
+                    bar.setProgress((double) remainingTime / originalTime); // Update progress
                     saveTimerState(); // Persist state
-                    seconds--;
                 } else {
                     // Handle the 0-second mark
                     getConfig().set("facteventStarted", 3);
@@ -274,13 +244,6 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                 }
             }
         }, 0L, 20L); // Runs every 20 ticks (1 second)
-    }
-
-    private void sendTitleAndSound(String time, String message, String sound) {
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a times 30 60 30");
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a subtitle [\"\",{\"text\":\"" + time + "\",\"color\":\"dark_purple\"},{\"text\":\" " + message + "\",\"color\":\"gold\"}]");
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "title @a title {\"text\":\"\"}");
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "execute at @a run playsound " + sound + " master @p");
     }
 
     private void updateBossBarTitle(int time) {

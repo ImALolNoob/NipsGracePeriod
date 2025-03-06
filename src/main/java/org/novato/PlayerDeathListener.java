@@ -1,4 +1,5 @@
 package org.novato;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -51,6 +52,7 @@ public class PlayerDeathListener implements Listener {
         } else {
             player.setGameMode(org.bukkit.GameMode.SPECTATOR);
             player.sendMessage("§6The timer has §4ended§6. You are now in §aspectator mode§6.");
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "manuadd " + player.getName() + " Spectator");
         }
     }
 }

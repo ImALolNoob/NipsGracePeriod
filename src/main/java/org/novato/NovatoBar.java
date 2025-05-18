@@ -218,7 +218,7 @@ public final class NovatoBar extends JavaPlugin implements Listener {
                 int newRemainingTime = originalTime - elapsedSeconds;
 
                 if (newRemainingTime != remainingTime) {
-                    //logger.info("Adjusting remaining time from " + remainingTime + " to " + newRemainingTime);
+                    logger.info("Adjusting remaining time from " + remainingTime + " to " + newRemainingTime);
                     remainingTime = newRemainingTime;
                 }
 

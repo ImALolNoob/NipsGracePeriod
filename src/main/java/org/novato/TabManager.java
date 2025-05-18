@@ -17,17 +17,17 @@ public class TabManager implements Listener {
 
         if (!novatoBar.isTimerActive() && !novatoBar.isTimerEnded()) {
             // Before the timer starts
-            String header = "§6YOLOCRAFT SEASON III\n§eFestival of §4C§6O§eL§2O§9U§5R";
+            String header = "§6YOLOCRAFT SEASON IV\n§eNew Heights";
             String footer = "§7§lThe event will start soon!";
             player.setPlayerListHeaderFooter(header, footer);
         } else if (novatoBar.isTimerActive() && !novatoBar.isTimerEnded()) {
             // During the event
-            String header = "\n§6YOLOCRAFT SEASON III\n§eFestival of §4C§6O§eL§2O§9U§5R";
+            String header = "\n§6YOLOCRAFT SEASON IV\n§eNew Heights";
             String footer = "§6Hardcore Mode: §2Disabled";
             player.setPlayerListHeaderFooter(header, footer);
         } else if (novatoBar.isTimerEnded()) {
             // After the timer ends
-            String header = "§6YOLOCRAFT SEASON III\n§eFestival of §4C§6O§eL§2O§9U§5R";
+            String header = "§6YOLOCRAFT SEASON IV\n§eNew Heights";
             String footer = "§6Hardcore Mode: §cEnabled";
             player.setPlayerListHeaderFooter(header, footer);
         }

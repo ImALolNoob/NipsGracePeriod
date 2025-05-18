@@ -34,7 +34,7 @@ public class PlayerDeathListener implements Listener {
                 player.spigot().respawn();
                 player.teleport(bedLocation);
                 player.sendMessage("§6You have §arespawned §6at your bed as the timer is still running.");
-                Bukkit.dispatchCommand( Bukkit.getConsoleSender(),player.getName() + " was saved by the grace period");
+                Bukkit.dispatchCommand( Bukkit.getConsoleSender(),"say " + player.getName() + " was saved by the grace period");
 
             } else {
                 // Drop the player's inventory before canceling the event

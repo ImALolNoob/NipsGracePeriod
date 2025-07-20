@@ -19,6 +19,14 @@ public class PlayerDeathListener implements Listener {
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
+        long firstPlayed = player.getFirstPlayed(); // in milliseconds
+        long lastPlayed = player.getLastPlayed();   // in milliseconds
+
+        long now = System.currentTimeMillis();
+        long sessionTime = player.isOnline() ? now - lastPlayed : 0;
+        long totalPlayTime = (lastPlayed - firstPlayed) + sessionTime;
+        long playTimeSeconds = totalPlayTime / 1000;
+        player.sendMessage("Your playtime: " + playTimeSeconds + " seconds");
         if (!((NovatoBar) plugin).isTimerEnded()) {
             Location bedLocation = player.getBedSpawnLocation();
             if (bedLocation != null) {
@@ -52,9 +60,13 @@ public class PlayerDeathListener implements Listener {
                 player.sendMessage("§5No bed found! §6You have §arespawned §6at the world spawn as the timer is still running.");
             }
         } else {
-            player.setGameMode(org.bukkit.GameMode.SPECTATOR);
-            player.sendMessage("§6The timer has §4ended§6. You are now in §aspectator mode§6.");
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "manuadd " + player.getName() + " Spectator");
+            if (playertimeseconds < 21600) {
+                return; // If the player has played less than 6 hours, do not allow death
+            } else {
+                player.setGameMode(org.bukkit.GameMode.SPECTATOR);
+                player.sendMessage("§6The timer has §4ended§6. You are now in §aspectator mode§6.");
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "manuadd " + player.getName() + " Spectator");
+            }
         }
     }
 }

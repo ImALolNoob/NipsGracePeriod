@@ -1,6 +1,8 @@
 name: NovatoBar
 main: org.novato.NovatoBar
 version: 1.1-SNAPSHOT
+
+depend: [Essentials]
 commands:
   timer:
     description: Manage the timer boss bar

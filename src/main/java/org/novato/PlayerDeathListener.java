@@ -61,7 +61,15 @@ public class PlayerDeathListener implements Listener {
             }
         } else {
             if (playTimeSeconds < 21600) {
-                return; // If the player has played less than 6 hours, do not allow death
+                Location bedLocation = player.getBedSpawnLocation();
+                // If the player has played less than 6 hours, do not allow death
+                player.getInventory().clear(); // Clear the player's inventory
+                event.setCancelled(true); // Cancel the death event
+                player.spigot().respawn();
+                player.teleport(bedLocation);
+                player.sendTitle("§6You have not played 6 hours!", "§7Enjoy your stay", 10, 70, 20);
+                // Arguments: title, subtitle, fadeIn, stay, fadeOut (in ticks)
+
             } else {
                 player.setGameMode(org.bukkit.GameMode.SPECTATOR);
                 player.sendMessage("§6The timer has §4ended§6. You are now in §aspectator mode§6.");

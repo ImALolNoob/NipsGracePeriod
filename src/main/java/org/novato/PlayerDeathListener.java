@@ -60,7 +60,7 @@ public class PlayerDeathListener implements Listener {
                 player.sendMessage("§5No bed found! §6You have §arespawned §6at the world spawn as the timer is still running.");
             }
         } else {
-            if (playertimeseconds < 21600) {
+            if (playTimeSeconds < 21600) {
                 return; // If the player has played less than 6 hours, do not allow death
             } else {
                 player.setGameMode(org.bukkit.GameMode.SPECTATOR);

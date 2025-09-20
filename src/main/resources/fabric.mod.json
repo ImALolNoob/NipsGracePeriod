@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "hardcore_grace_period",
+  "version": "${version}",
+  "name": "Hardcore Grace Period",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/hardcore_grace_period/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "org.novato.hardcore_grace_period.client.Hardcore_grace_periodDataGenerator"
+    ],
+    "client": [
+      "org.novato.hardcore_grace_period.client.Hardcore_grace_periodClient"
+    ],
+    "main": [
+      "org.novato.hardcore_grace_period.Hardcore_grace_period"
+    ]
+  },
+  "mixins": [
+    "hardcore_grace_period.mixins.json",
+    {
+      "config": "hardcore_grace_period.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}

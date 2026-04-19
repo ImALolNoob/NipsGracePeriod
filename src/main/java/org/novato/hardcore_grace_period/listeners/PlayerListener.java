@@ -12,17 +12,27 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.novato.hardcore_grace_period.GracePeriodManager;
 import org.novato.hardcore_grace_period.Hardcore_grace_period;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
 public class PlayerListener implements Listener {
     private final GracePeriodManager manager;
+    private final Hardcore_grace_period plugin;
+    private final Set<UUID> pendingGraceRespawn = new HashSet<>();
 
     public PlayerListener(GracePeriodManager manager, Hardcore_grace_period plugin) {
         this.manager = manager;
+        this.plugin = plugin;
         Bukkit.getScheduler().runTaskTimer(plugin, manager::tick, 0L, 1L);
     }
 
@@ -37,8 +47,10 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         manager.removePlayer(event.getPlayer());
+        pendingGraceRespawn.remove(event.getPlayer().getUniqueId());
     }
 
+    // Primary: cancel fatal damage before the player ever dies
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onEntityDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
@@ -49,6 +61,49 @@ public class PlayerListener implements Listener {
             event.setCancelled(true);
             handleGracePeriodDeath(player);
         }
+    }
+
+    // Fallback: catch any death that slipped past EntityDamageEvent (e.g. /kill, void edge cases)
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        if (!manager.hasGracePeriod(player.getUniqueId())) return;
+
+        // Suppress death message — we'll broadcast our own
+        event.deathMessage(null);
+
+        pendingGraceRespawn.add(player.getUniqueId());
+
+        // Force auto-respawn on the next tick so the player never sees the death screen
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                player.spigot().respawn();
+            }
+        });
+    }
+
+    // After auto-respawn: set spawn location, then restore health/hunger on the following tick
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        Player player = event.getPlayer();
+        if (!pendingGraceRespawn.remove(player.getUniqueId())) return;
+
+        Location spawnLoc = player.getRespawnLocation();
+        if (spawnLoc == null) {
+            World overworld = Bukkit.getWorld("world");
+            spawnLoc = overworld != null ? overworld.getSpawnLocation() : player.getWorld().getSpawnLocation();
+        }
+        event.setRespawnLocation(findSafeSpawn(spawnLoc));
+
+        // Restore health one tick after respawn (player state is fully reset by then)
+        final Player p = player;
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            manager.healPlayer(p);
+            new ArrayList<>(p.getActivePotionEffects())
+                .forEach(effect -> p.removePotionEffect(effect.getType()));
+            Bukkit.broadcast(Component.text(p.getName() + " was saved by the grace period!")
+                .color(NamedTextColor.YELLOW));
+        });
     }
 
     private void handleGracePeriodDeath(Player player) {
@@ -73,7 +128,7 @@ public class PlayerListener implements Listener {
         }
 
         // Clear all potion effects
-        new java.util.ArrayList<>(player.getActivePotionEffects())
+        new ArrayList<>(player.getActivePotionEffects())
             .forEach(effect -> player.removePotionEffect(effect.getType()));
 
         // Teleport to respawn point (bed/anchor) or world spawn
@@ -82,13 +137,12 @@ public class PlayerListener implements Listener {
             World overworld = Bukkit.getWorld("world");
             spawnLoc = overworld != null ? overworld.getSpawnLocation() : deathLocation;
         }
-        Location safeSpawn = findSafeSpawn(spawnLoc);
-        player.teleport(safeSpawn);
+        player.teleport(findSafeSpawn(spawnLoc));
 
-        // Restore health and hunger
         manager.healPlayer(player);
 
-        Bukkit.broadcast(Component.text(player.getName() + " was saved by the grace period!").color(NamedTextColor.YELLOW));
+        Bukkit.broadcast(Component.text(player.getName() + " was saved by the grace period!")
+            .color(NamedTextColor.YELLOW));
     }
 
     private Location findSafeSpawn(Location center) {

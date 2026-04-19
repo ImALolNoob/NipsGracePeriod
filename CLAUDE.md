@@ -87,8 +87,8 @@ Clears build artifacts.
 - **Online-Only**: Grace period only decrements while player is online (ticked only for online players in `GracePeriodManager.tick()`)
 - **Late Joiners**: New players joining after event starts get full grace period duration
 - **Data Saving**: Saves every 20 ticks (1 second) if data changed, or immediately on manual changes
-- **Death Handling**: Uses `AFTER_RESPAWN` event to detect death and restore players with grace period (heals, clears effects, broadcasts message)
-- **Overhead Display**: Currently disabled in `OverheadRenderer.java` due to Fabric API changes in 1.21.9+
+- **Death Handling**: Primary via `ServerPlayerEntityMixin` which cancels `onDeath()` — drops items/XP, clears inventory, teleports to safe spawn (bed → respawn anchor → world spawn, Y-search 120→64 for 2-air-above solid block). `PlayerDeathHandler` (`AFTER_RESPAWN`) is a secondary fallback that restores health/hunger if the mixin somehow misses a death.
+- **Overhead Display**: Currently disabled in `OverheadRenderer.java` due to `WorldRenderEvents.AFTER_ENTITIES` removal in Fabric API 1.21.9+
 
 ## Package Structure
 

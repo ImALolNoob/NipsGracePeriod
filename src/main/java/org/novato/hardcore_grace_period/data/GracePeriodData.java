@@ -15,7 +15,7 @@ import java.util.UUID;
 
 public class GracePeriodData {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path DATA_PATH = FabricLoader.getInstance().getGameDir().resolve("grace_period_data.json");
+    private static final Path DATA_PATH = FabricLoader.getInstance().getConfigDir().resolve("grace_period_data.json");
     private static final Type MAP_TYPE = new TypeToken<Map<String, PlayerData>>(){}.getType();
 
     public static class PlayerData {

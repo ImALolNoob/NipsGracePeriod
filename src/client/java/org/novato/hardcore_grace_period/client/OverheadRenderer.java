@@ -2,7 +2,9 @@ package org.novato.hardcore_grace_period.client;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+// WorldRenderEvents was removed in Minecraft 1.21.9/1.21.10
+// TODO: Reimplement using mixins when Fabric provides a replacement
+// import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.render.VertexConsumerProvider;
@@ -22,6 +24,11 @@ public class OverheadRenderer {
     private static final Map<UUID, Long> playerTimes = new HashMap<>();
 
     public static void init() {
+        // DISABLED: WorldRenderEvents.AFTER_ENTITIES was removed in 1.21.9/1.21.10
+        // Overhead rendering is temporarily disabled until Fabric provides a replacement API
+        // The core grace period functionality still works via boss bar
+
+        /* Original code - commented out for 1.21.10 compatibility:
         WorldRenderEvents.AFTER_ENTITIES.register((context) -> {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.player == null || client.world == null) return;
@@ -40,6 +47,7 @@ public class OverheadRenderer {
                 }
             }
         });
+        */
     }
 
     public static void updatePlayerTime(UUID playerUuid, long remainingTime) {
@@ -64,7 +72,7 @@ public class OverheadRenderer {
         TextRenderer textRenderer = client.textRenderer;
 
         Vec3d cameraPos = client.gameRenderer.getCamera().getPos();
-        Vec3d playerPos = player.getPos().add(0, player.getHeight() + 0.5, 0);
+        Vec3d playerPos = player.getBlockPos().toCenterPos().add(0, player.getHeight() + 0.5, 0);
 
         double distance = cameraPos.distanceTo(playerPos);
         if (distance > 64.0) return; // Don't render if too far

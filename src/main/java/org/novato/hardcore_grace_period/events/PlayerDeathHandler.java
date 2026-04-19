@@ -6,6 +6,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 import org.novato.hardcore_grace_period.GracePeriodManager;
+import org.novato.hardcore_grace_period.mixin.ServerPlayerEntityAccessor;
 
 public class PlayerDeathHandler {
 
@@ -20,8 +21,9 @@ public class PlayerDeathHandler {
 
             if (manager.hasGracePeriod(oldPlayer.getUuid())) {
                 // Player died but has grace period - restore them
-                if (newPlayer.getServer() != null) {
-                    newPlayer.getServer().execute(() -> {
+                var server = ((ServerPlayerEntityAccessor) newPlayer).getServerInstance();
+                if (server != null) {
+                    server.execute(() -> {
                         // Restore full health and hunger
                         newPlayer.setHealth(newPlayer.getMaxHealth());
                         newPlayer.getHungerManager().setFoodLevel(20);
@@ -31,7 +33,7 @@ public class PlayerDeathHandler {
                         newPlayer.clearStatusEffects();
 
                         // Broadcast message
-                        newPlayer.getServer().getPlayerManager().broadcast(
+                        server.getPlayerManager().broadcast(
                             Text.literal(newPlayer.getName().getString() + " was saved by the grace period!")
                                 .formatted(Formatting.YELLOW),
                             false

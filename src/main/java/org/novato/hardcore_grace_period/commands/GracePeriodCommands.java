@@ -55,11 +55,86 @@ public class GracePeriodCommands {
             return 0;
         }
 
-        manager.startEvent();
+        // Start the countdown
+        startCountdown(context.getSource().getServer(), manager);
+
         context.getSource().sendFeedback(() ->
-            Text.literal("Grace period event started!").formatted(Formatting.GREEN), true);
+            Text.literal("Starting grace period countdown...").formatted(Formatting.YELLOW), true);
 
         return 1;
+    }
+
+    private static void startCountdown(net.minecraft.server.MinecraftServer server, GracePeriodManager manager) {
+        // Send initial countdown message
+        server.getPlayerManager().broadcast(
+            Text.literal("Grace Period Starting in 10 seconds...").formatted(Formatting.GOLD, Formatting.BOLD),
+            false
+        );
+
+        // Schedule countdown titles from 10 to 1
+        for (int i = 10; i >= 1; i--) {
+            final int countdown = i;
+            scheduleTask(server, (10 - i) * 20, () -> {
+                // Send title to all players
+                for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+                    player.networkHandler.sendPacket(new net.minecraft.network.packet.s2c.play.TitleS2CPacket(
+                        Text.literal(String.valueOf(countdown)).formatted(Formatting.YELLOW, Formatting.BOLD)
+                    ));
+
+                    // Play a sound for each countdown tick
+                    player.playSound(
+                        net.minecraft.sound.SoundEvents.BLOCK_NOTE_BLOCK_HAT.value(),
+                        1.0f,
+                        1.0f
+                    );
+                }
+            });
+        }
+
+        // Schedule the actual event start at 10 seconds (200 ticks)
+        scheduleTask(server, 200, () -> {
+            // Get the formatted grace period time
+            String gracePeriodTime = manager.getConfig().getFormattedGracePeriod();
+
+            // Send "Grace Period Has Started" title
+            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+                player.networkHandler.sendPacket(new net.minecraft.network.packet.s2c.play.TitleS2CPacket(
+                    Text.literal("Grace Period Has Started!").formatted(Formatting.GREEN, Formatting.BOLD)
+                ));
+                player.networkHandler.sendPacket(new net.minecraft.network.packet.s2c.play.SubtitleS2CPacket(
+                    Text.literal(gracePeriodTime + " Grace Period Has Started").formatted(Formatting.YELLOW)
+                ));
+
+                // Play a different sound for the start
+                player.playSound(
+                    net.minecraft.sound.SoundEvents.ENTITY_PLAYER_LEVELUP,
+                    1.0f,
+                    1.0f
+                );
+            }
+
+            // Actually start the event
+            manager.startEvent();
+        });
+    }
+
+    private static void scheduleTask(net.minecraft.server.MinecraftServer server, long delayTicks, Runnable task) {
+        // Use the server's task queue to schedule delayed execution
+        final long targetTime = server.getTicks() + delayTicks;
+
+        // Create a repeating check until we reach the target time
+        scheduleRepeatingCheck(server, targetTime, task);
+    }
+
+    private static void scheduleRepeatingCheck(net.minecraft.server.MinecraftServer server, long targetTime, Runnable task) {
+        server.execute(() -> {
+            if (server.getTicks() >= targetTime) {
+                task.run();
+            } else {
+                // Schedule another check next tick
+                scheduleRepeatingCheck(server, targetTime, task);
+            }
+        });
     }
 
     private static int resetEvent(CommandContext<ServerCommandSource> context) {

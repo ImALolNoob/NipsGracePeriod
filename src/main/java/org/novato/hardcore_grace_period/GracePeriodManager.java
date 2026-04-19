@@ -2,6 +2,8 @@ package org.novato.hardcore_grace_period;
 
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
@@ -56,6 +58,9 @@ public class GracePeriodManager {
             player.getHungerManager().setFoodLevel(20);
             player.getHungerManager().setSaturationLevel(20.0f);
 
+            // Give Regeneration 10 and Saturation 10 for 10 seconds (200 ticks)
+            player.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 200, 9, false, true, true));
+            player.addStatusEffect(new StatusEffectInstance(StatusEffects.SATURATION, 200, 9, false, true, true));
         }
 
         server.getPlayerManager().broadcast(
@@ -63,6 +68,9 @@ public class GracePeriodManager {
                 .formatted(Formatting.GREEN, Formatting.BOLD),
             false
         );
+
+        // Set world border to 30 million blocks
+        setWorldBorderToThirtyMillion();
 
         saveData();
     }
@@ -166,6 +174,18 @@ public class GracePeriodManager {
         // Save data every 20 ticks (1 second) if data changed
         if (dataChanged && server.getTicks() % 20 == 0) {
             saveData();
+        }
+    }
+
+    private void setWorldBorderToThirtyMillion() {
+        // Execute the worldborder command using the command dispatcher
+        try {
+            server.getCommandManager().getDispatcher().execute(
+                "worldborder set 30000000",
+                server.getCommandSource()
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to set world border: " + e.getMessage());
         }
     }
 

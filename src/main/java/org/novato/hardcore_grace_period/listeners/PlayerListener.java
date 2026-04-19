@@ -2,6 +2,8 @@ package org.novato.hardcore_grace_period.listeners;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -101,6 +103,10 @@ public class PlayerListener implements Listener {
             manager.healPlayer(p);
             new ArrayList<>(p.getActivePotionEffects())
                 .forEach(effect -> p.removePotionEffect(effect.getType()));
+            p.showTitle(Title.title(
+                Component.text("You're still in the game!").color(NamedTextColor.GREEN).decorate(TextDecoration.BOLD),
+                Component.text("Grace period saved you — " + manager.formatTime(manager.getRemainingTime(p.getUniqueId())) + " remaining").color(NamedTextColor.YELLOW)
+            ));
             Bukkit.broadcast(Component.text(p.getName() + " was saved by the grace period!")
                 .color(NamedTextColor.YELLOW));
         });
@@ -140,6 +146,11 @@ public class PlayerListener implements Listener {
         player.teleport(findSafeSpawn(spawnLoc));
 
         manager.healPlayer(player);
+
+        player.showTitle(Title.title(
+            Component.text("You're still in the game!").color(NamedTextColor.GREEN).decorate(TextDecoration.BOLD),
+            Component.text("Grace period saved you — " + manager.formatTime(manager.getRemainingTime(player.getUniqueId())) + " remaining").color(NamedTextColor.YELLOW)
+        ));
 
         Bukkit.broadcast(Component.text(player.getName() + " was saved by the grace period!")
             .color(NamedTextColor.YELLOW));

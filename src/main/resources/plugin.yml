@@ -1,0 +1,16 @@
+name: HardcoreGracePeriod
+version: 1.0-SNAPSHOT
+main: org.novato.hardcore_grace_period.Hardcore_grace_period
+api-version: '1.21'
+description: Configurable grace period protection for hardcore servers
+authors:
+  - Novato
+commands:
+  graceperiod:
+    description: Manage the grace period event
+    usage: /graceperiod <start|reset|check|set|resetplayer>
+    permission: graceperiod.admin
+permissions:
+  graceperiod.admin:
+    description: Allows management of grace period commands
+    default: op

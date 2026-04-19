@@ -2,7 +2,7 @@ package org.novato.hardcore_grace_period.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import net.fabricmc.loader.api.FabricLoader;
+import org.novato.hardcore_grace_period.Hardcore_grace_period;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,41 +10,44 @@ import java.nio.file.Path;
 
 public class ModConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("hardcore-grace-period.json");
 
     public int gracePeriodHours = 3;
     public int gracePeriodMinutes = 0;
     public boolean enableBossBar = true;
-    public boolean enableOverheadDisplay = true;
     public boolean debugMode = false;
 
-    public static ModConfig load() {
-        if (Files.exists(CONFIG_PATH)) {
+    public static ModConfig load(Hardcore_grace_period plugin) {
+        Path configPath = getConfigPath(plugin);
+        if (Files.exists(configPath)) {
             try {
-                String json = Files.readString(CONFIG_PATH);
-                return GSON.fromJson(json, ModConfig.class);
+                String json = Files.readString(configPath);
+                ModConfig cfg = GSON.fromJson(json, ModConfig.class);
+                if (cfg != null) return cfg;
             } catch (IOException e) {
-                System.err.println("Failed to load config, using defaults: " + e.getMessage());
+                plugin.getLogger().warning("Failed to load config, using defaults: " + e.getMessage());
             }
         }
-
         ModConfig config = new ModConfig();
-        config.save();
+        config.save(plugin);
         return config;
     }
 
-    public void save() {
+    public void save(Hardcore_grace_period plugin) {
         try {
-            Files.createDirectories(CONFIG_PATH.getParent());
-            String json = GSON.toJson(this);
-            Files.writeString(CONFIG_PATH, json);
+            Path configPath = getConfigPath(plugin);
+            Files.createDirectories(configPath.getParent());
+            Files.writeString(configPath, GSON.toJson(this));
         } catch (IOException e) {
-            System.err.println("Failed to save config: " + e.getMessage());
+            plugin.getLogger().warning("Failed to save config: " + e.getMessage());
         }
     }
 
+    private static Path getConfigPath(Hardcore_grace_period plugin) {
+        return plugin.getDataFolder().toPath().resolve("config.json");
+    }
+
     public long getGracePeriodTicks() {
-        return (gracePeriodHours * 60L * 60L + gracePeriodMinutes * 60L) * 20L; // Convert hours and minutes to ticks (20 ticks per second)
+        return (gracePeriodHours * 60L * 60L + gracePeriodMinutes * 60L) * 20L;
     }
 
     public String getFormattedGracePeriod() {

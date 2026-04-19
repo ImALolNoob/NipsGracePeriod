@@ -1,243 +1,157 @@
 package org.novato.hardcore_grace_period.commands;
 
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.context.CommandContext;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.command.argument.EntityArgumentType;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.title.Title;
+import org.bukkit.Bukkit;
+import org.bukkit.Sound;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
 import org.novato.hardcore_grace_period.GracePeriodManager;
+import org.novato.hardcore_grace_period.Hardcore_grace_period;
 
-import java.util.Collection;
-import java.util.UUID;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
-public class GracePeriodCommands {
+public class GracePeriodCommands implements CommandExecutor, TabCompleter {
+    private final GracePeriodManager manager;
 
-    public static void register() {
-        CommandRegistrationCallback.EVENT.register(GracePeriodCommands::registerCommands);
+    public GracePeriodCommands(GracePeriodManager manager) {
+        this.manager = manager;
     }
 
-    private static void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher,
-                                       CommandRegistryAccess registryAccess,
-                                       CommandManager.RegistrationEnvironment environment) {
-
-        dispatcher.register(CommandManager.literal("graceperiod")
-            .requires(source -> source.hasPermissionLevel(2))
-            .then(CommandManager.literal("start")
-                .executes(GracePeriodCommands::startEvent))
-            .then(CommandManager.literal("reset")
-                .executes(GracePeriodCommands::resetEvent))
-            .then(CommandManager.literal("check")
-                .then(CommandManager.argument("player", EntityArgumentType.player())
-                    .executes(GracePeriodCommands::checkPlayer)))
-            .then(CommandManager.literal("set")
-                .then(CommandManager.argument("player", EntityArgumentType.player())
-                    .then(CommandManager.argument("hours", IntegerArgumentType.integer(0, 24))
-                        .executes(GracePeriodCommands::setPlayerTimeHours)
-                        .then(CommandManager.argument("minutes", IntegerArgumentType.integer(0, 59))
-                            .executes(GracePeriodCommands::setPlayerTimeHoursMinutes)))))
-            .then(CommandManager.literal("resetplayer")
-                .then(CommandManager.argument("player", EntityArgumentType.player())
-                    .executes(GracePeriodCommands::resetPlayerTime))));
-    }
-
-    private static int startEvent(CommandContext<ServerCommandSource> context) {
-        GracePeriodManager manager = GracePeriodManager.getInstance();
-
-        if (manager.isEventStarted()) {
-            context.getSource().sendError(Text.literal("Grace period event is already running!"));
-            return 0;
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length == 0) {
+            sender.sendMessage(Component.text("Usage: /graceperiod <start|reset|check|set|resetplayer>").color(NamedTextColor.YELLOW));
+            return true;
         }
 
-        // Start the countdown
-        startCountdown(context.getSource().getServer(), manager);
-
-        context.getSource().sendFeedback(() ->
-            Text.literal("Starting grace period countdown...").formatted(Formatting.YELLOW), true);
-
-        return 1;
+        switch (args[0].toLowerCase()) {
+            case "start" -> handleStart(sender);
+            case "reset" -> handleReset(sender);
+            case "check" -> handleCheck(sender, args);
+            case "set" -> handleSet(sender, args);
+            case "resetplayer" -> handleResetPlayer(sender, args);
+            default -> sender.sendMessage(Component.text("Unknown subcommand. Use: start, reset, check, set, resetplayer").color(NamedTextColor.RED));
+        }
+        return true;
     }
 
-    private static void startCountdown(net.minecraft.server.MinecraftServer server, GracePeriodManager manager) {
-        // Send initial countdown message
-        server.getPlayerManager().broadcast(
-            Text.literal("Grace Period Starting in 10 seconds...").formatted(Formatting.GOLD, Formatting.BOLD),
-            false
-        );
+    private void handleStart(CommandSender sender) {
+        if (manager.isEventStarted()) {
+            sender.sendMessage(Component.text("Grace period event is already running!").color(NamedTextColor.RED));
+            return;
+        }
+        startCountdown();
+        sender.sendMessage(Component.text("Starting grace period countdown...").color(NamedTextColor.YELLOW));
+    }
 
-        // Schedule countdown titles from 10 to 1
+    private void startCountdown() {
+        Bukkit.broadcast(Component.text("Grace Period Starting in 10 seconds...").color(NamedTextColor.GOLD).decorate(TextDecoration.BOLD));
+
+        Hardcore_grace_period plugin = Hardcore_grace_period.getInstance();
+        String gracePeriodTime = manager.getConfig().getFormattedGracePeriod();
+
         for (int i = 10; i >= 1; i--) {
             final int countdown = i;
-            scheduleTask(server, (10 - i) * 20, () -> {
-                // Send title to all players
-                for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-                    player.networkHandler.sendPacket(new net.minecraft.network.packet.s2c.play.TitleS2CPacket(
-                        Text.literal(String.valueOf(countdown)).formatted(Formatting.YELLOW, Formatting.BOLD)
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    player.showTitle(Title.title(
+                        Component.text(String.valueOf(countdown)).color(NamedTextColor.YELLOW).decorate(TextDecoration.BOLD),
+                        Component.empty()
                     ));
-
-                    // Play a sound for each countdown tick
-                    player.playSound(
-                        net.minecraft.sound.SoundEvents.BLOCK_NOTE_BLOCK_HAT.value(),
-                        1.0f,
-                        1.0f
-                    );
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 1.0f, 1.0f);
                 }
-            });
+            }, (10 - i) * 20L);
         }
 
-        // Schedule the actual event start at 10 seconds (200 ticks)
-        scheduleTask(server, 200, () -> {
-            // Get the formatted grace period time
-            String gracePeriodTime = manager.getConfig().getFormattedGracePeriod();
-
-            // Send "Grace Period Has Started" title
-            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-                player.networkHandler.sendPacket(new net.minecraft.network.packet.s2c.play.TitleS2CPacket(
-                    Text.literal("Grace Period Has Started!").formatted(Formatting.GREEN, Formatting.BOLD)
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                player.showTitle(Title.title(
+                    Component.text("Grace Period Has Started!").color(NamedTextColor.GREEN).decorate(TextDecoration.BOLD),
+                    Component.text(gracePeriodTime + " of Grace Period protection").color(NamedTextColor.YELLOW)
                 ));
-                player.networkHandler.sendPacket(new net.minecraft.network.packet.s2c.play.SubtitleS2CPacket(
-                    Text.literal(gracePeriodTime + " Grace Period Has Started").formatted(Formatting.YELLOW)
-                ));
-
-                // Play a different sound for the start
-                player.playSound(
-                    net.minecraft.sound.SoundEvents.ENTITY_PLAYER_LEVELUP,
-                    1.0f,
-                    1.0f
-                );
+                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
             }
-
-            // Actually start the event
             manager.startEvent();
-        });
+        }, 200L);
     }
 
-    private static void scheduleTask(net.minecraft.server.MinecraftServer server, long delayTicks, Runnable task) {
-        // Use the server's task queue to schedule delayed execution
-        final long targetTime = server.getTicks() + delayTicks;
-
-        // Create a repeating check until we reach the target time
-        scheduleRepeatingCheck(server, targetTime, task);
-    }
-
-    private static void scheduleRepeatingCheck(net.minecraft.server.MinecraftServer server, long targetTime, Runnable task) {
-        server.execute(() -> {
-            if (server.getTicks() >= targetTime) {
-                task.run();
-            } else {
-                // Schedule another check next tick
-                scheduleRepeatingCheck(server, targetTime, task);
-            }
-        });
-    }
-
-    private static int resetEvent(CommandContext<ServerCommandSource> context) {
-        GracePeriodManager manager = GracePeriodManager.getInstance();
+    private void handleReset(CommandSender sender) {
         manager.resetEvent();
-
-        context.getSource().sendFeedback(() ->
-            Text.literal("Grace period event reset!").formatted(Formatting.YELLOW), true);
-
-        return 1;
+        sender.sendMessage(Component.text("Grace period event reset!").color(NamedTextColor.YELLOW));
     }
 
-    private static int checkPlayer(CommandContext<ServerCommandSource> context) {
-        try {
-            ServerPlayerEntity player = EntityArgumentType.getPlayer(context, "player");
-            GracePeriodManager manager = GracePeriodManager.getInstance();
-
-            long remaining = manager.getRemainingTime(player.getUuid());
-            String timeStr = formatTime(remaining);
-
-            context.getSource().sendFeedback(() ->
-                Text.literal(player.getName().getString() + " has " + timeStr + " remaining")
-                    .formatted(Formatting.AQUA), false);
-
-            return 1;
-        } catch (Exception e) {
-            context.getSource().sendError(Text.literal("Failed to check player: " + e.getMessage()));
-            return 0;
+    private void handleCheck(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /graceperiod check <player>").color(NamedTextColor.RED));
+            return;
         }
-    }
-
-    private static int setPlayerTimeHours(CommandContext<ServerCommandSource> context) {
-        try {
-            ServerPlayerEntity player = EntityArgumentType.getPlayer(context, "player");
-            int hours = IntegerArgumentType.getInteger(context, "hours");
-
-            GracePeriodManager manager = GracePeriodManager.getInstance();
-            long ticks = hours * 60L * 60L * 20L; // Convert hours to ticks
-            manager.setPlayerTime(player.getUuid(), ticks);
-
-            context.getSource().sendFeedback(() ->
-                Text.literal("Set " + player.getName().getString() + "'s grace period to " + hours + " hours")
-                    .formatted(Formatting.GREEN), true);
-
-            return 1;
-        } catch (Exception e) {
-            context.getSource().sendError(Text.literal("Failed to set player time: " + e.getMessage()));
-            return 0;
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) {
+            sender.sendMessage(Component.text("Player not found: " + args[1]).color(NamedTextColor.RED));
+            return;
         }
+        long remaining = manager.getRemainingTime(target.getUniqueId());
+        sender.sendMessage(Component.text(target.getName() + " has " + manager.formatTime(remaining) + " remaining").color(NamedTextColor.AQUA));
     }
 
-    private static int setPlayerTimeHoursMinutes(CommandContext<ServerCommandSource> context) {
+    private void handleSet(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(Component.text("Usage: /graceperiod set <player> <hours> [minutes]").color(NamedTextColor.RED));
+            return;
+        }
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) {
+            sender.sendMessage(Component.text("Player not found: " + args[1]).color(NamedTextColor.RED));
+            return;
+        }
         try {
-            ServerPlayerEntity player = EntityArgumentType.getPlayer(context, "player");
-            int hours = IntegerArgumentType.getInteger(context, "hours");
-            int minutes = IntegerArgumentType.getInteger(context, "minutes");
-
-            GracePeriodManager manager = GracePeriodManager.getInstance();
-            long ticks = (hours * 60L * 60L + minutes * 60L) * 20L; // Convert hours and minutes to ticks
-            manager.setPlayerTime(player.getUuid(), ticks);
-
+            int hours = Integer.parseInt(args[2]);
+            int minutes = args.length >= 4 ? Integer.parseInt(args[3]) : 0;
+            long ticks = (hours * 60L * 60L + minutes * 60L) * 20L;
+            manager.setPlayerTime(target.getUniqueId(), ticks);
             String timeStr = hours > 0 ? hours + "h " + minutes + "m" : minutes + "m";
-            context.getSource().sendFeedback(() ->
-                Text.literal("Set " + player.getName().getString() + "'s grace period to " + timeStr)
-                    .formatted(Formatting.GREEN), true);
-
-            return 1;
-        } catch (Exception e) {
-            context.getSource().sendError(Text.literal("Failed to set player time: " + e.getMessage()));
-            return 0;
+            sender.sendMessage(Component.text("Set " + target.getName() + "'s grace period to " + timeStr).color(NamedTextColor.GREEN));
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Component.text("Invalid number. Usage: /graceperiod set <player> <hours> [minutes]").color(NamedTextColor.RED));
         }
     }
 
-    private static int resetPlayerTime(CommandContext<ServerCommandSource> context) {
-        try {
-            ServerPlayerEntity player = EntityArgumentType.getPlayer(context, "player");
-            GracePeriodManager manager = GracePeriodManager.getInstance();
-            manager.resetPlayerTime(player.getUuid());
-
-            String defaultTime = manager.getConfig().getFormattedGracePeriod();
-            context.getSource().sendFeedback(() ->
-                Text.literal("Reset " + player.getName().getString() + "'s grace period to " + defaultTime)
-                    .formatted(Formatting.GREEN), true);
-
-            return 1;
-        } catch (Exception e) {
-            context.getSource().sendError(Text.literal("Failed to reset player time: " + e.getMessage()));
-            return 0;
+    private void handleResetPlayer(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /graceperiod resetplayer <player>").color(NamedTextColor.RED));
+            return;
         }
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) {
+            sender.sendMessage(Component.text("Player not found: " + args[1]).color(NamedTextColor.RED));
+            return;
+        }
+        manager.resetPlayerTime(target.getUniqueId());
+        sender.sendMessage(Component.text("Reset " + target.getName() + "'s grace period to " + manager.getConfig().getFormattedGracePeriod()).color(NamedTextColor.GREEN));
     }
 
-    private static String formatTime(long ticks) {
-        long seconds = ticks / 20;
-        long hours = seconds / 3600;
-        long minutes = (seconds % 3600) / 60;
-        long secs = seconds % 60;
-
-        if (hours > 0) {
-            return String.format("%dh %dm %ds", hours, minutes, secs);
-        } else if (minutes > 0) {
-            return String.format("%dm %ds", minutes, secs);
-        } else {
-            return String.format("%ds", secs);
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length == 1) {
+            return Arrays.asList("start", "reset", "check", "set", "resetplayer").stream()
+                .filter(s -> s.startsWith(args[0].toLowerCase()))
+                .collect(Collectors.toList());
         }
+        if (args.length == 2 && (args[0].equalsIgnoreCase("check") ||
+                args[0].equalsIgnoreCase("set") || args[0].equalsIgnoreCase("resetplayer"))) {
+            return Bukkit.getOnlinePlayers().stream()
+                .map(Player::getName)
+                .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
+                .collect(Collectors.toList());
+        }
+        return List.of();
     }
 }

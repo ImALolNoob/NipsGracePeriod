@@ -2,11 +2,9 @@ package org.novato.hardcore_grace_period.data;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.reflect.TypeToken;
-import net.fabricmc.loader.api.FabricLoader;
+import org.novato.hardcore_grace_period.Hardcore_grace_period;
 
 import java.io.IOException;
-import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -15,8 +13,6 @@ import java.util.UUID;
 
 public class GracePeriodData {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path DATA_PATH = FabricLoader.getInstance().getConfigDir().resolve("grace_period_data.json");
-    private static final Type MAP_TYPE = new TypeToken<Map<String, PlayerData>>(){}.getType();
 
     public static class PlayerData {
         public long remainingTime;
@@ -40,42 +36,45 @@ public class GracePeriodData {
         }
     }
 
-    public static EventData load() {
-        if (Files.exists(DATA_PATH)) {
+    private static Path getDataPath(Hardcore_grace_period plugin) {
+        return plugin.getDataFolder().toPath().resolve("grace_period_data.json");
+    }
+
+    public static EventData load(Hardcore_grace_period plugin) {
+        Path path = getDataPath(plugin);
+        if (Files.exists(path)) {
             try {
-                String json = Files.readString(DATA_PATH);
+                String json = Files.readString(path);
                 EventData data = GSON.fromJson(json, EventData.class);
                 return data != null ? data : new EventData();
             } catch (IOException e) {
-                System.err.println("Failed to load grace period data: " + e.getMessage());
+                plugin.getLogger().warning("Failed to load grace period data: " + e.getMessage());
             }
         }
         return new EventData();
     }
 
-    public static void save(boolean eventStarted, long eventStartTime, Map<UUID, Long> playerTimes) {
+    public static void save(Hardcore_grace_period plugin, boolean eventStarted, long eventStartTime, Map<UUID, Long> playerTimes) {
         try {
+            Path path = getDataPath(plugin);
+            Files.createDirectories(path.getParent());
             EventData data = new EventData();
             data.eventStarted = eventStarted;
             data.eventStartTime = eventStartTime;
-
             for (Map.Entry<UUID, Long> entry : playerTimes.entrySet()) {
-                String uuidStr = entry.getKey().toString();
-                data.players.put(uuidStr, new PlayerData(entry.getValue(), entry.getValue() > 0));
+                data.players.put(entry.getKey().toString(), new PlayerData(entry.getValue(), entry.getValue() > 0));
             }
-
-            String json = GSON.toJson(data);
-            Files.writeString(DATA_PATH, json);
+            Files.writeString(path, GSON.toJson(data));
         } catch (IOException e) {
-            System.err.println("Failed to save grace period data: " + e.getMessage());
+            plugin.getLogger().warning("Failed to save grace period data: " + e.getMessage());
         }
     }
 
-    public static void delete() {
+    public static void delete(Hardcore_grace_period plugin) {
         try {
-            Files.deleteIfExists(DATA_PATH);
+            Files.deleteIfExists(getDataPath(plugin));
         } catch (IOException e) {
-            System.err.println("Failed to delete grace period data: " + e.getMessage());
+            plugin.getLogger().warning("Failed to delete grace period data: " + e.getMessage());
         }
     }
 }

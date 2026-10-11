@@ -1,7 +1,7 @@
 name: HardcoreGracePeriod
 version: 1.0-SNAPSHOT
 main: org.novato.hardcore_grace_period.Hardcore_grace_period
-api-version: '1.21'
+api-version: '26.3'
 description: Configurable grace period protection for hardcore servers
 authors:
   - Novato

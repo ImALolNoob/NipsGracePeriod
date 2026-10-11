@@ -8,6 +8,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -19,6 +20,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.tag.DamageTypeTags;
 import org.novato.hardcore_grace_period.GracePeriodManager;
 import org.novato.hardcore_grace_period.Hardcore_grace_period;
 
@@ -35,7 +38,8 @@ public class PlayerListener implements Listener {
     public PlayerListener(GracePeriodManager manager, Hardcore_grace_period plugin) {
         this.manager = manager;
         this.plugin = plugin;
-        Bukkit.getScheduler().runTaskTimer(plugin, manager::tick, 0L, 1L);
+        // Grace is real time, so checking once a second is enough for boss bars and expiry
+        Bukkit.getScheduler().runTaskTimer(plugin, manager::tick, 0L, 20L);
     }
 
     @EventHandler
@@ -60,6 +64,11 @@ public class PlayerListener implements Listener {
 
         double finalHealth = player.getHealth() - event.getFinalDamage();
         if (finalHealth <= 0) {
+            // Let a held Totem of Undying save them the vanilla way instead of dropping everything.
+            // Totems don't work against void or /kill damage, so grace still handles those.
+            if (holdsTotem(player) && !DamageTypeTags.BYPASSES_INVULNERABILITY.isTagged(event.getDamageSource().getDamageType())) {
+                return;
+            }
             event.setCancelled(true);
             handleGracePeriodDeath(player);
         }
@@ -90,22 +99,18 @@ public class PlayerListener implements Listener {
         Player player = event.getPlayer();
         if (!pendingGraceRespawn.remove(player.getUniqueId())) return;
 
-        Location spawnLoc = player.getRespawnLocation();
-        if (spawnLoc == null) {
-            World overworld = Bukkit.getWorld("world");
-            spawnLoc = overworld != null ? overworld.getSpawnLocation() : player.getWorld().getSpawnLocation();
-        }
-        event.setRespawnLocation(findSafeSpawn(spawnLoc));
+        event.setRespawnLocation(graceRespawnLocation(player));
 
         // Restore health one tick after respawn (player state is fully reset by then)
         final Player p = player;
         Bukkit.getScheduler().runTask(plugin, () -> {
             manager.healPlayer(p);
+            resetDangerState(p);
             new ArrayList<>(p.getActivePotionEffects())
                 .forEach(effect -> p.removePotionEffect(effect.getType()));
             p.showTitle(Title.title(
                 Component.text("You're still in the game!").color(NamedTextColor.GREEN).decorate(TextDecoration.BOLD),
-                Component.text("Grace period saved you — " + manager.formatTime(manager.getRemainingTime(p.getUniqueId())) + " remaining").color(NamedTextColor.YELLOW)
+                Component.text("Grace period saved you — " + manager.formatTime(manager.getRemainingMillis(p.getUniqueId())) + " remaining").color(NamedTextColor.YELLOW)
             ));
             Bukkit.broadcast(Component.text(p.getName() + " was saved by the grace period!")
                 .color(NamedTextColor.YELLOW));
@@ -133,54 +138,94 @@ public class PlayerListener implements Listener {
             player.setTotalExperience(0);
         }
 
-        // Clear all potion effects
+        // Clear all potion effects, and anything that would keep hurting them after the teleport
         new ArrayList<>(player.getActivePotionEffects())
             .forEach(effect -> player.removePotionEffect(effect.getType()));
+        resetDangerState(player);
 
-        // Teleport to respawn point (bed/anchor) or world spawn
-        Location spawnLoc = player.getRespawnLocation();
-        if (spawnLoc == null) {
-            World overworld = Bukkit.getWorld("world");
-            spawnLoc = overworld != null ? overworld.getSpawnLocation() : deathLocation;
-        }
-        player.teleport(findSafeSpawn(spawnLoc));
+        player.teleport(graceRespawnLocation(player));
 
         manager.healPlayer(player);
 
         player.showTitle(Title.title(
             Component.text("You're still in the game!").color(NamedTextColor.GREEN).decorate(TextDecoration.BOLD),
-            Component.text("Grace period saved you — " + manager.formatTime(manager.getRemainingTime(player.getUniqueId())) + " remaining").color(NamedTextColor.YELLOW)
+            Component.text("Grace period saved you — " + manager.formatTime(manager.getRemainingMillis(player.getUniqueId())) + " remaining").color(NamedTextColor.YELLOW)
         ));
 
         Bukkit.broadcast(Component.text(player.getName() + " was saved by the grace period!")
             .color(NamedTextColor.YELLOW));
     }
 
-    private Location findSafeSpawn(Location center) {
-        World world = center.getWorld();
-        if (world == null) return center;
-
-        for (int y = 120; y >= 64; y--) {
-            Location check = new Location(world, center.getBlockX(), y, center.getBlockZ());
-            if (isSafe(check)) {
-                return check.add(0.5, 0, 0.5);
-            }
-        }
-        return center.clone().add(0.5, 1, 0.5);
+    private static boolean holdsTotem(Player player) {
+        PlayerInventory inv = player.getInventory();
+        return inv.getItemInMainHand().getType() == Material.TOTEM_OF_UNDYING
+            || inv.getItemInOffHand().getType() == Material.TOTEM_OF_UNDYING;
     }
 
-    private boolean isSafe(Location loc) {
-        World world = loc.getWorld();
-        if (world == null) return false;
+    /** Puts out fire and clears pending fall damage and freezing. */
+    private static void resetDangerState(Player player) {
+        player.setFireTicks(0);
+        player.setFallDistance(0);
+        player.setFreezeTicks(0);
+    }
 
-        Material ground = world.getBlockAt(loc.getBlockX(), loc.getBlockY() - 1, loc.getBlockZ()).getType();
-        Material feet = world.getBlockAt(loc).getType();
-        Material head = world.getBlockAt(loc.getBlockX(), loc.getBlockY() + 1, loc.getBlockZ()).getType();
+    /**
+     * Where a grace save sends the player: exactly where vanilla would respawn them
+     * (next to their bed or charged respawn anchor), or the overworld spawn if they
+     * have none. Only if that spot isn't safe do we look for a safe one nearby.
+     */
+    private Location graceRespawnLocation(Player player) {
+        Location respawn = player.getRespawnLocation();
+        if (respawn != null && respawn.getWorld() != null) {
+            Location safe = findSafeNear(respawn);
+            if (safe != null) return safe;
+        }
 
-        boolean safeGround = ground.isSolid() && ground != Material.LAVA && ground != Material.WATER;
-        boolean clearFeet = feet == Material.AIR;
-        boolean clearHead = head == Material.AIR;
+        World overworld = Bukkit.getWorld("world");
+        World world = overworld != null ? overworld : player.getWorld();
+        Location spawn = world.getSpawnLocation();
+        Location safe = findSafeNear(spawn);
+        if (safe != null) return safe;
 
-        return safeGround && clearFeet && clearHead;
+        // Last resort: top of the world at spawn
+        return world.getHighestBlockAt(spawn).getLocation().add(0.5, 1, 0.5);
+    }
+
+    /** The spot itself if it's safe, otherwise the closest safe spot within a few blocks; null if none. */
+    private Location findSafeNear(Location center) {
+        World world = center.getWorld();
+        if (world == null) return null;
+        int cx = center.getBlockX();
+        int cy = center.getBlockY();
+        int cz = center.getBlockZ();
+
+        for (int radius = 0; radius <= 3; radius++) {
+            for (int dy : new int[]{0, 1, -1, 2, -2}) {
+                for (int dx = -radius; dx <= radius; dx++) {
+                    for (int dz = -radius; dz <= radius; dz++) {
+                        if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) continue; // only the ring at this radius
+                        Block feet = world.getBlockAt(cx + dx, cy + dy, cz + dz);
+                        if (isSafe(feet)) {
+                            return feet.getLocation().add(0.5, 0, 0.5);
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean isSafe(Block feet) {
+        Block ground = feet.getRelative(0, -1, 0);
+        Block head = feet.getRelative(0, 1, 0);
+        Material groundType = ground.getType();
+
+        boolean safeGround = groundType.isSolid()
+            && groundType != Material.MAGMA_BLOCK
+            && groundType != Material.CAMPFIRE
+            && groundType != Material.SOUL_CAMPFIRE
+            && groundType != Material.CACTUS;
+        // isAir() covers AIR, CAVE_AIR and VOID_AIR, so underground spots count
+        return safeGround && feet.getType().isAir() && head.getType().isAir();
     }
 }

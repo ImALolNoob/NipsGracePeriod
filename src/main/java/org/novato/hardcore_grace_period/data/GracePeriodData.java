@@ -2,6 +2,7 @@ package org.novato.hardcore_grace_period.data;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
 import org.novato.hardcore_grace_period.Hardcore_grace_period;
 
 import java.io.IOException;
@@ -15,23 +16,22 @@ public class GracePeriodData {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     public static class PlayerData {
-        public long remainingTime;
-        public boolean hasGracePeriod;
+        /** When this player's grace period ends, in epoch milliseconds (real time, keeps running while offline). */
+        public long graceEndMillis;
+        /** Old format (ticks left, online-only). Only read to migrate older data files, never written. */
+        public Long remainingTime;
 
-        public PlayerData(long remainingTime, boolean hasGracePeriod) {
-            this.remainingTime = remainingTime;
-            this.hasGracePeriod = hasGracePeriod;
+        public PlayerData(long graceEndMillis) {
+            this.graceEndMillis = graceEndMillis;
         }
     }
 
     public static class EventData {
         public boolean eventStarted;
-        public long eventStartTime;
         public Map<String, PlayerData> players;
 
         public EventData() {
             this.eventStarted = false;
-            this.eventStartTime = 0;
             this.players = new HashMap<>();
         }
     }
@@ -42,29 +42,39 @@ public class GracePeriodData {
 
     public static EventData load(Hardcore_grace_period plugin) {
         Path path = getDataPath(plugin);
-        if (Files.exists(path)) {
-            try {
-                String json = Files.readString(path);
-                EventData data = GSON.fromJson(json, EventData.class);
-                return data != null ? data : new EventData();
-            } catch (IOException e) {
-                plugin.getLogger().warning("Failed to load grace period data: " + e.getMessage());
-            }
+        if (!Files.exists(path)) {
+            return new EventData();
         }
-        return new EventData();
+        try {
+            EventData data = GSON.fromJson(Files.readString(path), EventData.class);
+            if (data == null) return new EventData();
+            if (data.players == null) data.players = new HashMap<>();
+            migrateOldFormat(data);
+            return data;
+        } catch (IOException | JsonParseException e) {
+            JsonFiles.backUpBroken(plugin, path, e);
+            return new EventData();
+        }
     }
 
-    public static void save(Hardcore_grace_period plugin, boolean eventStarted, long eventStartTime, Map<UUID, Long> playerTimes) {
-        try {
-            Path path = getDataPath(plugin);
-            Files.createDirectories(path.getParent());
-            EventData data = new EventData();
-            data.eventStarted = eventStarted;
-            data.eventStartTime = eventStartTime;
-            for (Map.Entry<UUID, Long> entry : playerTimes.entrySet()) {
-                data.players.put(entry.getKey().toString(), new PlayerData(entry.getValue(), entry.getValue() > 0));
+    /** Older files stored ticks left; turn those into an end time counted from now. */
+    private static void migrateOldFormat(EventData data) {
+        long now = System.currentTimeMillis();
+        for (PlayerData player : data.players.values()) {
+            if (player != null && player.graceEndMillis == 0 && player.remainingTime != null) {
+                player.graceEndMillis = now + Math.max(0, player.remainingTime) * 50L;
             }
-            Files.writeString(path, GSON.toJson(data));
+        }
+    }
+
+    public static void save(Hardcore_grace_period plugin, boolean eventStarted, Map<UUID, Long> graceEnds) {
+        EventData data = new EventData();
+        data.eventStarted = eventStarted;
+        for (Map.Entry<UUID, Long> entry : graceEnds.entrySet()) {
+            data.players.put(entry.getKey().toString(), new PlayerData(entry.getValue()));
+        }
+        try {
+            JsonFiles.writeAtomically(getDataPath(plugin), GSON.toJson(data));
         } catch (IOException e) {
             plugin.getLogger().warning("Failed to save grace period data: " + e.getMessage());
         }

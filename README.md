@@ -1,76 +1,49 @@
-# Hardcore Grace Period Mod
+# Hardcore Grace Period
 
-A Fabric server-side mod for Minecraft 1.21.8 that provides a configurable grace period for hardcore servers.
+A Paper plugin for Minecraft 26.3 hardcore servers. Every player gets a grace period (default 3 hours) that starts the first time they join after the event begins. While it lasts they can't die: a lethal hit drops their items and XP, sends them back to their bed or spawn, and heals them.
 
 ## Features
 
-- **Configurable Grace Period**: Default 3 hours, customizable in config
-- **Visual Indicators**: Boss bar and overhead displays showing remaining time
-- **Death Protection**: Players with grace period are healed instead of dying
-- **Synchronized Events**: All players start with same grace period when event begins
-- **Late Joiner Support**: New players get full grace period time
-- **Online-Only Timer**: Grace period only counts down while players are online
-- **Data Persistence**: Saves state across server restarts
+- **Real-time grace**: each player's grace runs for a fixed time from their first join, and keeps running while they're offline. Late joiners get the same amount.
+- **Boss bar** showing each player their remaining time (green → yellow → red).
+- **Death protection**: lethal damage is cancelled; items and XP drop where they "died" and the player is sent to their bed/anchor or the world spawn.
+- **Totems still work**: a held Totem of Undying saves the player the vanilla way (except against void and `/kill`).
+- **Event start**: 10-second countdown, everyone healed, time set to day, world border reset to the vanilla default (so a small lobby border can be used before the event).
+- **Safe files**: data is written atomically; an unreadable config or data file is backed up and replaced with defaults instead of disabling the plugin.
 
 ## Commands
 
-All commands require OP level 2 (admin permissions):
+All need the `graceperiod.admin` permission (default: op).
 
-- `/graceperiod start` - Start the grace period event (heals all players, sets time to day)
-- `/graceperiod reset` - Reset the entire event and clear all data
-- `/graceperiod check <player>` - Check a specific player's remaining grace time
-- `/graceperiod set <player> <hours>` - Set a player's grace period to specific hours
-- `/graceperiod resetplayer <player>` - Reset a player's time back to default
+| Command | Does |
+|---|---|
+| `/graceperiod start` | Starts the 10-second countdown, then the event |
+| `/graceperiod reset` | Cancels a running countdown, ends the event and clears all player data |
+| `/graceperiod check <player>` | Shows a player's remaining grace (online or offline) |
+| `/graceperiod set <player> <hours 0-24> [minutes 0-59]` | Sets a player's grace to end that long from now |
+| `/graceperiod resetplayer <player>` | Gives a player the default grace again, starting now |
+
+`check`, `set` and `resetplayer` work for offline players who have joined the server before.
 
 ## Configuration
 
-The mod creates a config file at `config/hardcore-grace-period.json`:
+`plugins/HardcoreGracePeriod/config.json`:
 
 ```json
 {
   "gracePeriodHours": 3,
+  "gracePeriodMinutes": 0,
   "enableBossBar": true,
-  "enableOverheadDisplay": true,
   "debugMode": false
 }
 ```
 
-## How It Works
+Read once at startup; restart to apply changes.
 
-### Before Event Starts
-- Players can die normally and will respawn
-- No grace period protection active
+## Building
 
-### During Event
-1. Use `/graceperiod start` to begin the event
-2. All online players are healed and get full grace period
-3. World time is set to day (0 ticks)
-4. Players see their remaining time in boss bar at top of screen
-5. Other players can see grace time above player heads
-6. If a player would die, they are healed instead and a message is broadcast
-7. Timer only counts down while player is online
+```bash
+./gradlew build
+```
 
-### Visual Feedback
-- **Boss Bar Colors**: Green → Yellow → Red as time decreases
-- **Overhead Display**: Shows "Grace: Xh Ym" above players with remaining time
-- **Chat Messages**: Broadcasts when players are saved by grace period
-
-## Installation
-
-1. Install Fabric Loader for Minecraft 1.21.8
-2. Install Fabric API
-3. Place the mod JAR in your server's `mods` folder
-4. Start the server
-
-## Build Output
-
-The compiled mod can be found at:
-`build/libs/hardcore-grace-period-1.0-SNAPSHOT.jar`
-
-## Development
-
-Built with:
-- Minecraft 1.21.8
-- Fabric Loader 0.17.2
-- Fabric API 0.133.4+1.21.8
-- Java 21
+Output: `build/libs/hardcore-grace-period-1.0-SNAPSHOT.jar`. Needs Java 25. Built against `paper-api` 26.3.

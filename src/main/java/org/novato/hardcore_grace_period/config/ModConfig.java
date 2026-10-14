@@ -2,7 +2,9 @@ package org.novato.hardcore_grace_period.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
 import org.novato.hardcore_grace_period.Hardcore_grace_period;
+import org.novato.hardcore_grace_period.data.JsonFiles;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -20,11 +22,10 @@ public class ModConfig {
         Path configPath = getConfigPath(plugin);
         if (Files.exists(configPath)) {
             try {
-                String json = Files.readString(configPath);
-                ModConfig cfg = GSON.fromJson(json, ModConfig.class);
+                ModConfig cfg = GSON.fromJson(Files.readString(configPath), ModConfig.class);
                 if (cfg != null) return cfg;
-            } catch (IOException e) {
-                plugin.getLogger().warning("Failed to load config, using defaults: " + e.getMessage());
+            } catch (IOException | JsonParseException e) {
+                JsonFiles.backUpBroken(plugin, configPath, e);
             }
         }
         ModConfig config = new ModConfig();
@@ -34,9 +35,7 @@ public class ModConfig {
 
     public void save(Hardcore_grace_period plugin) {
         try {
-            Path configPath = getConfigPath(plugin);
-            Files.createDirectories(configPath.getParent());
-            Files.writeString(configPath, GSON.toJson(this));
+            JsonFiles.writeAtomically(getConfigPath(plugin), GSON.toJson(this));
         } catch (IOException e) {
             plugin.getLogger().warning("Failed to save config: " + e.getMessage());
         }
@@ -46,8 +45,8 @@ public class ModConfig {
         return plugin.getDataFolder().toPath().resolve("config.json");
     }
 
-    public long getGracePeriodTicks() {
-        return (gracePeriodHours * 60L * 60L + gracePeriodMinutes * 60L) * 20L;
+    public long getGracePeriodMillis() {
+        return (gracePeriodHours * 60L * 60L + gracePeriodMinutes * 60L) * 1000L;
     }
 
     public String getFormattedGracePeriod() {

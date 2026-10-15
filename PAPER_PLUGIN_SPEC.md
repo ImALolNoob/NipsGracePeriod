@@ -31,12 +31,21 @@ The plugin has two phases:
   "gracePeriodHours": 3,
   "gracePeriodMinutes": 0,
   "enableBossBar": true,
-  "debugMode": false
+  "debugMode": false,
+  "deathTitleEnabled": true,
+  "deathTitle": "§4☠ §6%player%",
+  "deathSubtitle": "§7§ohas been lost to the 7 Seas",
+  "deathTitleFadeIn": 20,
+  "deathTitleStay": 80,
+  "deathTitleFadeOut": 30,
+  "deathSound": "minecraft:block.conduit.deactivate",
+  "deathSoundVolume": 0.6,
+  "deathSoundPitch": 1.0
 }
 ```
 
 - `gracePeriodHours` + `gracePeriodMinutes` together define each player's grace duration.
-- Read once on startup. Changing it requires a server restart.
+- Read once on startup. Changing it requires a server restart. Settings missing from an existing file are added with their defaults.
 - If the file can't be read, a copy is saved as `config.json.broken-<timestamp>`, a warning is logged, and defaults are used.
 
 ---
@@ -81,6 +90,12 @@ Listen to `EntityDamageEvent`. When the event fires for a player, check whether 
    - Broadcast to all players: `"<name> was saved by the grace period!"` in yellow.
 
 A `PlayerDeathEvent` + `PlayerRespawnEvent` fallback handles deaths that skip the damage event. It suppresses the death message, auto-respawns the player at the same respawn location, and restores health on the next tick.
+
+### Permanent Deaths
+When a player with no grace left dies (`PlayerDeathEvent`, not cancelled), every online player sees a title and hears a sound:
+- Title `deathTitle`, subtitle `deathSubtitle` (`%player%` = name, `§` colour codes), with `deathTitleFadeIn` / `deathTitleStay` / `deathTitleFadeOut` in ticks.
+- `deathSound` at `deathSoundVolume` / `deathSoundPitch`, played at each listener's own position; empty for none.
+- Turned off with `deathTitleEnabled: false`. Grace saves never trigger it.
 
 ### Respawn Location Logic
 1. **Bed / Respawn Anchor**: the player's vanilla respawn location (`Player#getRespawnLocation()`), if they have a valid one.

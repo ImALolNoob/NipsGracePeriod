@@ -22,6 +22,7 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.tag.DamageTypeTags;
+import org.novato.hardcore_grace_period.DeathAnnouncer;
 import org.novato.hardcore_grace_period.GracePeriodManager;
 import org.novato.hardcore_grace_period.Hardcore_grace_period;
 
@@ -34,10 +35,12 @@ public class PlayerListener implements Listener {
     private final GracePeriodManager manager;
     private final Hardcore_grace_period plugin;
     private final Set<UUID> pendingGraceRespawn = new HashSet<>();
+    private final DeathAnnouncer deathAnnouncer;
 
     public PlayerListener(GracePeriodManager manager, Hardcore_grace_period plugin) {
         this.manager = manager;
         this.plugin = plugin;
+        this.deathAnnouncer = new DeathAnnouncer(manager.getConfig());
         // Grace is real time, so checking once a second is enough for boss bars and expiry
         Bukkit.getScheduler().runTaskTimer(plugin, manager::tick, 0L, 20L);
     }
@@ -78,7 +81,13 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
-        if (!manager.hasGracePeriod(player.getUniqueId())) return;
+        if (!manager.hasGracePeriod(player.getUniqueId())) {
+            // No grace left: this death is permanent
+            if (!event.isCancelled()) {
+                deathAnnouncer.announce(player);
+            }
+            return;
+        }
 
         // Suppress death message — we'll broadcast our own
         event.deathMessage(null);

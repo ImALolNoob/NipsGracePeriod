@@ -28,9 +28,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **`GracePeriodCommands`**: `/graceperiod start|reset|check|set|resetplayer`. Tracks countdown tasks so `start` can't be run twice and `reset` cancels a running countdown. `check`/`set`/`resetplayer` accept offline players via `Bukkit.getOfflinePlayerIfCached`.
 - **`PlayerListener`**:
   - `EntityDamageEvent` (HIGHEST): if the hit would be lethal and the player has grace, cancel it and run the grace save (drop items/XP, clear effects, fire, fall distance and freezing, teleport, heal). If they hold a Totem of Undying and the damage isn't `bypasses_invulnerability`, vanilla handles it instead.
-  - `PlayerDeathEvent` + `PlayerRespawnEvent`: fallback for deaths that skip the damage event.
+  - `PlayerDeathEvent` + `PlayerRespawnEvent`: fallback for deaths that skip the damage event. A death without grace is permanent and goes to `DeathAnnouncer`.
   - Respawn location: the player's vanilla respawn point (bed/anchor) if safe, else the closest safe spot within 3 blocks, else the overworld spawn, else the highest block at spawn. "Safe" = solid, non-harmful ground with air (any air, including cave air) at feet and head.
-- **`ModConfig`**: `config.json` (Gson). Duration helpers in milliseconds.
+- **`DeathAnnouncer`**: title + sound for everyone on a permanent death, from the `death*` settings.
+- **`ModConfig`**: `config.json` (Gson). Duration helpers in milliseconds. Re-saved on load so new settings appear in existing files.
 - **`GracePeriodData`**: `grace_period_data.json` with `eventStarted` and `players.<uuid>.graceEndMillis`. Old files with `remainingTime` (ticks) are migrated on load.
 - **`JsonFiles`**: atomic writes (temp file + move) and backup/warning for unreadable JSON files.
 

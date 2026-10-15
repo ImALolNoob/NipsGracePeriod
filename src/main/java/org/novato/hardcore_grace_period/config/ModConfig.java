@@ -18,12 +18,28 @@ public class ModConfig {
     public boolean enableBossBar = true;
     public boolean debugMode = false;
 
+    // Title shown to everyone when a player dies for good (their grace period is over).
+    // %player% = the player's name. Colour codes use §. Times are in ticks (20 ticks = 1 second).
+    public boolean deathTitleEnabled = true;
+    public String deathTitle = "§4☠ §6%player%";
+    public String deathSubtitle = "§7§ohas been lost to the 7 Seas";
+    public int deathTitleFadeIn = 20;
+    public int deathTitleStay = 80;
+    public int deathTitleFadeOut = 30;
+    // Any sound ID; empty for no sound. Played at each player's own position.
+    public String deathSound = "minecraft:block.conduit.deactivate";
+    public float deathSoundVolume = 0.6f;
+    public float deathSoundPitch = 1.0f;
+
     public static ModConfig load(Hardcore_grace_period plugin) {
         Path configPath = getConfigPath(plugin);
         if (Files.exists(configPath)) {
             try {
                 ModConfig cfg = GSON.fromJson(Files.readString(configPath), ModConfig.class);
-                if (cfg != null) return cfg;
+                if (cfg != null) {
+                    cfg.save(plugin); // writes any newly added settings into an existing config
+                    return cfg;
+                }
             } catch (IOException | JsonParseException e) {
                 JsonFiles.backUpBroken(plugin, configPath, e);
             }

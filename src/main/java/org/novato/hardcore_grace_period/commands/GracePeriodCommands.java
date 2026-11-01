@@ -19,6 +19,7 @@ import org.novato.hardcore_grace_period.Hardcore_grace_period;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class GracePeriodCommands implements CommandExecutor, TabCompleter {
@@ -234,17 +235,36 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("Reset " + name + "'s grace period to " + manager.getConfig().getFormattedGracePeriod() + " from now").color(NamedTextColor.GREEN));
     }
 
-    /** Finds an online player, or an offline one who has played on this server before. */
+    /**
+     * Finds an online player, or an offline one who has played on this server before.
+     * Resolution order: online exact match, then the name profile cache (fast path), then
+     * a scan of on-disk player data (reliable across restarts, even once a name has aged
+     * out of the cache), then a raw UUID. This is what lets an admin add time to a player
+     * who left before the time was added and hasn't come back since.
+     */
     private OfflinePlayer findPlayer(CommandSender sender, String name) {
         Player online = Bukkit.getPlayerExact(name);
         if (online != null) return online;
 
-        OfflinePlayer offline = Bukkit.getOfflinePlayerIfCached(name);
-        if (offline == null || !offline.hasPlayedBefore()) {
-            sender.sendMessage(Component.text("Player not found (they must have joined this server before): " + name).color(NamedTextColor.RED));
-            return null;
+        // Fast path: name is still in the in-memory profile cache.
+        OfflinePlayer cached = Bukkit.getOfflinePlayerIfCached(name);
+        if (cached != null && cached.hasPlayedBefore()) return cached;
+
+        // Reliable path: anyone with player data on disk, regardless of cache state.
+        for (OfflinePlayer candidate : Bukkit.getOfflinePlayers()) {
+            if (name.equalsIgnoreCase(candidate.getName())) return candidate;
         }
-        return offline;
+
+        // Last resort: allow targeting by raw UUID (e.g. a name that can't be resolved).
+        try {
+            OfflinePlayer byId = Bukkit.getOfflinePlayer(UUID.fromString(name));
+            if (byId.hasPlayedBefore()) return byId;
+        } catch (IllegalArgumentException ignored) {
+            // not a UUID; fall through to the not-found message
+        }
+
+        sender.sendMessage(Component.text("Player not found (they must have joined this server before): " + name).color(NamedTextColor.RED));
+        return null;
     }
 
     @Override

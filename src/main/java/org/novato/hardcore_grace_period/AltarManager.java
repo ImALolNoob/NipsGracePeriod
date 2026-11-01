@@ -388,24 +388,34 @@ public class AltarManager {
                 return;
             }
 
-            // Twin helix of light climbing a 4-block column.
+            // How far into the charge we are: 0.0 at the start (10s left) -> 1.0 at the finale.
+            double progress = Math.min(1.0, (double) elapsed[0] / durationTicks);
+
+            // Twin helix of light — denser, wider and brighter as the charge builds.
             double angle = elapsed[0] * 0.5;
+            double yStep = 0.5 - progress * 0.35;              // 0.5 (sparse) -> 0.15 (dense)
+            double radius = 0.5 + progress * 0.7;              // 0.5 -> 1.2 (widens outward)
+            int perPoint = 1 + (int) Math.round(progress * 2); // 1 -> 3 particles per point
             for (int arm = 0; arm < 2; arm++) {
                 double a = angle + arm * Math.PI;
-                for (double y = 0; y <= 4; y += 0.4) {
-                    double x = Math.cos(a + y) * 0.8;
-                    double z = Math.sin(a + y) * 0.8;
-                    particle(w, Particle.END_ROD, base.clone().add(x, y, z), 1, 0, 0, 0, 0);
+                for (double y = 0; y <= 4; y += yStep) {
+                    double x = Math.cos(a + y) * radius;
+                    double z = Math.sin(a + y) * radius;
+                    particle(w, Particle.END_ROD, base.clone().add(x, y, z), perPoint, 0, 0, 0, 0);
                 }
             }
-            // Core swirl.
-            particle(w, Particle.TOTEM_OF_UNDYING, base, 10, 0.5, 0.9, 0.5, 0.25);
-            particle(w, Particle.SOUL_FIRE_FLAME, base, 6, 0.5, 0.5, 0.5, 0.01);
 
-            // A sound pulse each second, at the altar (only nearby players hear it).
+            // Core swirl, growing from a trickle to a storm.
+            particle(w, Particle.TOTEM_OF_UNDYING, base, 3 + (int) (progress * 50), 0.5, 0.9, 0.5, 0.2 + progress * 0.4);
+            particle(w, Particle.SOUL_FIRE_FLAME, base, 2 + (int) (progress * 25), 0.5, 0.6, 0.5, 0.01);
+            if (progress > 0.4) {
+                particle(w, Particle.ENCHANT, base, (int) (progress * 30), 0.6, 1.0, 0.6, 1.0);
+            }
+
+            // A rising sound pulse each second: bigger burst, higher pitch, as it climbs.
             if (elapsed[0] % 20 == 0) {
-                w.playSound(base, Sound.BLOCK_BEACON_AMBIENT, 0.7f, 1.3f);
-                particle(w, Particle.TOTEM_OF_UNDYING, base, 15, 0.5, 0.8, 0.5, 0.3);
+                w.playSound(base, Sound.BLOCK_BEACON_AMBIENT, 0.7f, 0.8f + (float) progress * 1.2f);
+                particle(w, Particle.TOTEM_OF_UNDYING, base, 10 + (int) (progress * 60), 0.5, 0.8, 0.5, 0.3);
             }
 
             elapsed[0] += period;

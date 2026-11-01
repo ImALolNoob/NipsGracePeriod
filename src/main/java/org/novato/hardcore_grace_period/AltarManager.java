@@ -9,6 +9,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -67,6 +68,8 @@ public class AltarManager {
             generateOffering();
             saveData();
         }
+        // Gentle ambient particles so the altar always looks alive.
+        plugin.getServer().getScheduler().runTaskTimer(plugin, this::playAmbientEffect, 40L, 12L);
     }
 
     private void buildMaterialPool() {
@@ -192,6 +195,7 @@ public class AltarManager {
         donated.put(mat, already + take);
 
         donor.playSound(donor.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.2f);
+        playDonationEffect();
         donor.sendMessage(Component.text("You offer " + take + "x " + pretty(mat) + "  (")
             .color(NamedTextColor.LIGHT_PURPLE)
             .append(Component.text((already + take) + "/" + required).color(NamedTextColor.WHITE))
@@ -216,7 +220,7 @@ public class AltarManager {
 
     private void triggerRevival(Player donor) {
         List<UUID> dead = new ArrayList<>(deadPlayers);
-        UUID chosen = dead.get(random.nextInt(dead.size()));
+        final UUID chosen = dead.get(random.nextInt(dead.size()));
         deadPlayers.remove(chosen);
 
         // The offering is spent; the next one is harder.
@@ -224,18 +228,24 @@ public class AltarManager {
         donated.clear();
         generateOffering();
 
+        // Grant the grace now and queue the revival as a crash-safe fallback. The player is only
+        // actually brought back when the 10-second charge-up finishes (see the callback below).
         graceManager.setPlayerTime(chosen, config.getAltarRevivalGraceMillis());
-
-        String name = resolveName(chosen);
-        Player online = Bukkit.getPlayer(chosen);
-        if (online != null && online.isOnline()) {
-            reviveNow(online);
-        } else {
-            pendingRevive.add(chosen);
-        }
-
+        pendingRevive.add(chosen);
         saveData();
-        broadcastRevival(name, donor.getName());
+
+        final String name = resolveName(chosen);
+        announceChargeStart(donor.getName());
+        startChargeUpShow(() -> {
+            Player online = Bukkit.getPlayer(chosen);
+            if (online != null && online.isOnline()) {
+                pendingRevive.remove(chosen); // revived live, so no login fallback needed
+                reviveNow(online);            // pops them in on top of the altar
+            }
+            // If they're offline, they stay queued and spawn at the altar on their next login (once).
+            saveData();
+            announceReturned(name);
+        });
     }
 
     /** Brings an online fallen player back into the living world. */
@@ -254,6 +264,12 @@ public class AltarManager {
                 .color(NamedTextColor.YELLOW)
         ));
         player.playSound(player.getLocation(), Sound.ITEM_TOTEM_USE, 1.0f, 1.0f);
+
+        // A burst of light wraps the reborn player.
+        Location at = player.getLocation().clone().add(0, 1, 0);
+        particle(player.getWorld(), Particle.TOTEM_OF_UNDYING, at, 90, 0.4, 0.9, 0.4, 0.4);
+        particle(player.getWorld(), Particle.END_ROD, at, 30, 0.3, 0.9, 0.3, 0.05);
+        particle(player.getWorld(), Particle.SOUL_FIRE_FLAME, at, 20, 0.4, 0.9, 0.4, 0.02);
     }
 
     /**
@@ -278,14 +294,122 @@ public class AltarManager {
         return world.getSpawnLocation();
     }
 
-    private void broadcastRevival(String revivedName, String donorName) {
-        Bukkit.broadcast(Component.text("⟱ The altar accepts the offering ⟰").color(NamedTextColor.LIGHT_PURPLE).decorate(TextDecoration.BOLD));
-        Bukkit.broadcast(Component.text(revivedName + " has been pulled back from death", NamedTextColor.GREEN)
-            .append(Component.text(" — offering completed by " + donorName + "!", NamedTextColor.GRAY)));
+    /** When the final item goes in: the ritual begins and the altar starts charging. */
+    private void announceChargeStart(String donorName) {
+        Bukkit.broadcast(Component.text("⟱ The final offering is accepted ⟰").color(NamedTextColor.LIGHT_PURPLE).decorate(TextDecoration.BOLD));
+        Bukkit.broadcast(Component.text(donorName + " completes the ritual — the altar begins to charge...", NamedTextColor.GRAY));
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            p.playSound(p.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.9f, 0.7f);
+        }
+    }
+
+    /** Ten seconds later, at the finale: the soul is returned. */
+    private void announceReturned(String revivedName) {
+        Bukkit.broadcast(Component.text(revivedName + " has been pulled back from death!").color(NamedTextColor.GREEN).decorate(TextDecoration.BOLD));
         Bukkit.broadcast(Component.text("The next soul will cost far more.").color(NamedTextColor.DARK_GRAY).decorate(TextDecoration.ITALIC));
         for (Player p : Bukkit.getOnlinePlayers()) {
-            p.playSound(p.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.8f, 1.0f);
+            p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.1f);
         }
+    }
+
+    // ----- Particle effects (all native Paper API, no extra plugin needed) -----
+
+    /**
+     * Spawns a particle, swallowing the error if this server build demands an extra data object
+     * (Color, Float, BlockData, ...) for it. Keeps a cosmetic effect from ever crashing the show
+     * or spamming the console; a particle that needs data is simply skipped on this version.
+     */
+    private void particle(World w, Particle p, Location loc, int count, double ox, double oy, double oz, double extra) {
+        try {
+            w.spawnParticle(p, loc, count, ox, oy, oz, extra);
+        } catch (RuntimeException ignored) {
+            // This particle wants a data argument on this server version — skip it.
+        }
+    }
+
+    /** Soft swirling particles at the altar every tick-batch; a little stronger when souls await rebirth. */
+    private void playAmbientEffect() {
+        Location altar = getAltarLocation();
+        if (altar == null || altar.getWorld() == null) return;
+        World w = altar.getWorld();
+        Location c = altar.clone().add(0.5, 1.0, 0.5);
+        particle(w, Particle.ENCHANT, c, 6, 0.4, 0.6, 0.4, 0.4);
+        particle(w, Particle.PORTAL, c, 5, 0.3, 0.5, 0.3, 0.3);
+        if (!deadPlayers.isEmpty()) {
+            // "Charged and waiting" — a gentle rising glow.
+            particle(w, Particle.SOUL_FIRE_FLAME, c.clone().add(0, 0.2, 0), 2, 0.15, 0.3, 0.15, 0.01);
+            particle(w, Particle.END_ROD, c, 2, 0.2, 0.5, 0.2, 0.01);
+        }
+    }
+
+    /** A small sparkle burst when someone makes an offering. */
+    private void playDonationEffect() {
+        Location altar = getAltarLocation();
+        if (altar == null || altar.getWorld() == null) return;
+        World w = altar.getWorld();
+        Location c = altar.clone().add(0.5, 1.0, 0.5);
+        particle(w, Particle.HAPPY_VILLAGER, c, 12, 0.4, 0.6, 0.4, 0);
+        particle(w, Particle.END_ROD, c, 10, 0.3, 0.5, 0.3, 0.05);
+        particle(w, Particle.WITCH, c, 8, 0.4, 0.6, 0.4, 0);
+    }
+
+    /**
+     * A roughly 10-second charge-up at the altar — an opening lightning flash, then a rotating
+     * twin-helix pillar of light with pulsing bursts and a sound beat each second, building to a
+     * send-off explosion. {@code onComplete} runs at the finale, which is when the player is
+     * actually brought back. Harmless (the lightning does no damage).
+     */
+    private void startChargeUpShow(Runnable onComplete) {
+        Location altar = getAltarLocation();
+        if (altar == null || altar.getWorld() == null) {
+            // No altar to animate — just bring them back immediately so nothing gets stuck.
+            onComplete.run();
+            return;
+        }
+        final World w = altar.getWorld();
+        final Location base = altar.clone().add(0.5, 1.0, 0.5);
+
+        // Opening beat.
+        w.strikeLightningEffect(altar.clone().add(0.5, 0, 0.5)); // visual only — no fire, no damage
+        particle(w, Particle.EXPLOSION, base, 1, 0, 0, 0, 0);
+
+        final int durationTicks = 200; // ~10 seconds
+        final int period = 2;          // update 10 times per second
+        final int[] elapsed = {0};
+        plugin.getServer().getScheduler().runTaskTimer(plugin, task -> {
+            if (elapsed[0] >= durationTicks) {
+                task.cancel();
+                // Finale — then the player pops in.
+                particle(w, Particle.EXPLOSION_EMITTER, base, 1, 0, 0, 0, 0);
+                particle(w, Particle.TOTEM_OF_UNDYING, base, 150, 0.7, 1.2, 0.7, 0.5);
+                particle(w, Particle.END_ROD, base, 70, 0.7, 1.0, 0.7, 0.18);
+                w.playSound(base, Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.2f);
+                onComplete.run();
+                return;
+            }
+
+            // Twin helix of light climbing a 4-block column.
+            double angle = elapsed[0] * 0.5;
+            for (int arm = 0; arm < 2; arm++) {
+                double a = angle + arm * Math.PI;
+                for (double y = 0; y <= 4; y += 0.4) {
+                    double x = Math.cos(a + y) * 0.8;
+                    double z = Math.sin(a + y) * 0.8;
+                    particle(w, Particle.END_ROD, base.clone().add(x, y, z), 1, 0, 0, 0, 0);
+                }
+            }
+            // Core swirl.
+            particle(w, Particle.TOTEM_OF_UNDYING, base, 10, 0.5, 0.9, 0.5, 0.25);
+            particle(w, Particle.SOUL_FIRE_FLAME, base, 6, 0.5, 0.5, 0.5, 0.01);
+
+            // A sound pulse each second, at the altar (only nearby players hear it).
+            if (elapsed[0] % 20 == 0) {
+                w.playSound(base, Sound.BLOCK_BEACON_AMBIENT, 0.7f, 1.3f);
+                particle(w, Particle.TOTEM_OF_UNDYING, base, 15, 0.5, 0.8, 0.5, 0.3);
+            }
+
+            elapsed[0] += period;
+        }, 0L, period);
     }
 
     // ----- Offering generation -----

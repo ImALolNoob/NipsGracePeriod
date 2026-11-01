@@ -60,7 +60,7 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
 
     private void handleStart(CommandSender sender) {
         if (manager.isEventStarted()) {
-            sender.sendMessage(Component.text("Grace period event is already running!").color(NamedTextColor.RED));
+            sender.sendMessage(Component.text("Grace period event is already running! (it's saved across restarts — use /graceperiod reset first to start a new one)").color(NamedTextColor.RED));
             return;
         }
         if (!countdownTasks.isEmpty()) {

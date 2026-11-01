@@ -5,6 +5,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -40,6 +41,8 @@ public class PlayerListener implements Listener {
     private final AltarManager altarManager;
     private final Hardcore_grace_period plugin;
     private final Set<UUID> pendingGraceRespawn = new HashSet<>();
+    /** Players who just died for good and must be dropped into spectator on respawn. */
+    private final Set<UUID> pendingSpectate = new HashSet<>();
     private final DeathAnnouncer deathAnnouncer;
 
     public PlayerListener(GracePeriodManager manager, AltarManager altarManager, Hardcore_grace_period plugin) {
@@ -62,6 +65,16 @@ public class PlayerListener implements Listener {
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (player.isOnline()) altarManager.reviveNow(player);
             });
+            return;
+        }
+        // Anyone still among the fallen stays a spectator until the altar revives them
+        // (covers a player who left on the death screen instead of respawning).
+        if (altarManager.isDead(player.getUniqueId())) {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (player.isOnline() && player.getGameMode() != GameMode.SPECTATOR) {
+                    player.setGameMode(GameMode.SPECTATOR);
+                }
+            });
         }
     }
 
@@ -81,6 +94,7 @@ public class PlayerListener implements Listener {
     public void onPlayerQuit(PlayerQuitEvent event) {
         manager.removePlayer(event.getPlayer());
         pendingGraceRespawn.remove(event.getPlayer().getUniqueId());
+        pendingSpectate.remove(event.getPlayer().getUniqueId());
     }
 
     // Primary: cancel fatal damage before the player ever dies
@@ -106,10 +120,15 @@ public class PlayerListener implements Listener {
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
         if (!manager.hasGracePeriod(player.getUniqueId())) {
-            // No grace left: this death is permanent
+            // No grace left: this death is permanent. Record the fallen player and, once they
+            // respawn, drop them into spectator mode so the altar can later bring them back.
             if (!event.isCancelled()) {
                 altarManager.markDead(player.getUniqueId());
                 deathAnnouncer.announce(player);
+                pendingSpectate.add(player.getUniqueId());
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (player.isOnline()) player.spigot().respawn();
+                });
             }
             return;
         }
@@ -131,6 +150,18 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
+
+        // Permanent death: respawn at the world spawn, then switch to spectator next tick.
+        if (pendingSpectate.remove(player.getUniqueId())) {
+            World overworld = Bukkit.getWorld("world");
+            World world = overworld != null ? overworld : player.getWorld();
+            event.setRespawnLocation(world.getSpawnLocation());
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (player.isOnline()) player.setGameMode(GameMode.SPECTATOR);
+            });
+            return;
+        }
+
         if (!pendingGraceRespawn.remove(player.getUniqueId())) return;
 
         event.setRespawnLocation(graceRespawnLocation(player));

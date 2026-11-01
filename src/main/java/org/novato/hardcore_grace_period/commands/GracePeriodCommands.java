@@ -33,7 +33,7 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            sender.sendMessage(Component.text("Usage: /graceperiod <start|reset|check|set|resetplayer>").color(NamedTextColor.YELLOW));
+            sender.sendMessage(Component.text("Usage: /graceperiod <start|reset|check|set|add|addall|resetplayer>").color(NamedTextColor.YELLOW));
             return true;
         }
 
@@ -42,8 +42,10 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
             case "reset" -> handleReset(sender);
             case "check" -> handleCheck(sender, args);
             case "set" -> handleSet(sender, args);
+            case "add" -> handleAdd(sender, args);
+            case "addall" -> handleAddAll(sender, args);
             case "resetplayer" -> handleResetPlayer(sender, args);
-            default -> sender.sendMessage(Component.text("Unknown subcommand. Use: start, reset, check, set, resetplayer").color(NamedTextColor.RED));
+            default -> sender.sendMessage(Component.text("Unknown subcommand. Use: start, reset, check, set, add, addall, resetplayer").color(NamedTextColor.RED));
         }
         return true;
     }
@@ -149,6 +151,76 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("Set " + name + "'s grace period to " + timeStr + " from now").color(NamedTextColor.GREEN));
     }
 
+    private void handleAdd(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(Component.text("Usage: /graceperiod add <player> <hours -24..24> [minutes 0-59]").color(NamedTextColor.RED));
+            return;
+        }
+        Long delta = parseDelta(sender, args, 2);
+        if (delta == null) return;
+
+        OfflinePlayer target = findPlayer(sender, args[1]);
+        if (target == null) return;
+
+        manager.addPlayerTime(target.getUniqueId(), delta);
+        String name = target.getName() != null ? target.getName() : args[1];
+        long remaining = manager.getRemainingMillis(target.getUniqueId());
+        sender.sendMessage(Component.text((delta >= 0 ? "Added " : "Removed ") + formatDelta(delta)
+            + " to " + name + "'s grace period (" + manager.formatTime(remaining) + " remaining)").color(NamedTextColor.GREEN));
+    }
+
+    private void handleAddAll(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /graceperiod addall <hours -24..24> [minutes 0-59]").color(NamedTextColor.RED));
+            return;
+        }
+        if (!manager.isEventStarted()) {
+            sender.sendMessage(Component.text("The grace period event hasn't started yet.").color(NamedTextColor.RED));
+            return;
+        }
+        Long delta = parseDelta(sender, args, 1);
+        if (delta == null) return;
+
+        int count = manager.addTimeToOnlinePlayers(delta);
+        sender.sendMessage(Component.text((delta >= 0 ? "Added " : "Removed ") + formatDelta(delta)
+            + " to " + count + " online player" + (count == 1 ? "" : "s")).color(NamedTextColor.GREEN));
+    }
+
+    /**
+     * Parses a signed hours/minutes amount starting at {@code hoursIndex} into millis
+     * (negative subtracts). Returns null and messages the sender on bad input.
+     */
+    private Long parseDelta(CommandSender sender, String[] args, int hoursIndex) {
+        int hours;
+        int minutes;
+        try {
+            hours = Integer.parseInt(args[hoursIndex]);
+            minutes = args.length > hoursIndex + 1 ? Integer.parseInt(args[hoursIndex + 1]) : 0;
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Component.text("Invalid number. Give whole hours (-24..24) and optional minutes (0-59).").color(NamedTextColor.RED));
+            return null;
+        }
+        if (hours < -24 || hours > 24 || minutes < 0 || minutes > 59) {
+            sender.sendMessage(Component.text("Hours must be -24..24 and minutes 0-59.").color(NamedTextColor.RED));
+            return null;
+        }
+        if (hours == 0 && minutes == 0) {
+            sender.sendMessage(Component.text("Give a non-zero amount of time to add or remove.").color(NamedTextColor.RED));
+            return null;
+        }
+        long magnitude = (Math.abs(hours) * 60L * 60L + minutes * 60L) * 1000L;
+        return hours < 0 ? -magnitude : magnitude;
+    }
+
+    private String formatDelta(long millis) {
+        long totalMinutes = Math.abs(millis) / 60000L;
+        long hours = totalMinutes / 60;
+        long minutes = totalMinutes % 60;
+        if (hours > 0 && minutes > 0) return hours + "h " + minutes + "m";
+        if (hours > 0) return hours + "h";
+        return minutes + "m";
+    }
+
     private void handleResetPlayer(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage(Component.text("Usage: /graceperiod resetplayer <player>").color(NamedTextColor.RED));
@@ -178,12 +250,12 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 1) {
-            return Arrays.asList("start", "reset", "check", "set", "resetplayer").stream()
+            return Arrays.asList("start", "reset", "check", "set", "add", "addall", "resetplayer").stream()
                 .filter(s -> s.startsWith(args[0].toLowerCase()))
                 .collect(Collectors.toList());
         }
-        if (args.length == 2 && (args[0].equalsIgnoreCase("check") ||
-                args[0].equalsIgnoreCase("set") || args[0].equalsIgnoreCase("resetplayer"))) {
+        if (args.length == 2 && (args[0].equalsIgnoreCase("check") || args[0].equalsIgnoreCase("set")
+                || args[0].equalsIgnoreCase("add") || args[0].equalsIgnoreCase("resetplayer"))) {
             return Bukkit.getOnlinePlayers().stream()
                 .map(Player::getName)
                 .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))

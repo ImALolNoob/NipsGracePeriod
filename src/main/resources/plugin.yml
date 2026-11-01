@@ -8,7 +8,7 @@ authors:
 commands:
   graceperiod:
     description: Manage the grace period event
-    usage: /graceperiod <start|reset|check|set|resetplayer>
+    usage: /graceperiod <start|reset|check|set|add|addall|resetplayer>
     permission: graceperiod.admin
 permissions:
   graceperiod.admin:

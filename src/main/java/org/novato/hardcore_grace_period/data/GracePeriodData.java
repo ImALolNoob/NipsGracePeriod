@@ -16,13 +16,15 @@ public class GracePeriodData {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     public static class PlayerData {
-        /** When this player's grace period ends, in epoch milliseconds (real time, keeps running while offline). */
-        public long graceEndMillis;
-        /** Old format (ticks left, online-only). Only read to migrate older data files, never written. */
+        /** Grace left for this player, in milliseconds. Only counts down while they are online. */
+        public long graceRemainingMillis;
+        /** Old format (absolute end time, kept running offline). Only read to migrate older files, never written. */
+        public Long graceEndMillis;
+        /** Oldest format (ticks left, online-only). Only read to migrate older files, never written. */
         public Long remainingTime;
 
-        public PlayerData(long graceEndMillis) {
-            this.graceEndMillis = graceEndMillis;
+        public PlayerData(long graceRemainingMillis) {
+            this.graceRemainingMillis = graceRemainingMillis;
         }
     }
 
@@ -57,20 +59,25 @@ public class GracePeriodData {
         }
     }
 
-    /** Older files stored ticks left; turn those into an end time counted from now. */
+    /** Convert older save formats into a remaining-millis budget. */
     private static void migrateOldFormat(EventData data) {
         long now = System.currentTimeMillis();
         for (PlayerData player : data.players.values()) {
-            if (player != null && player.graceEndMillis == 0 && player.remainingTime != null) {
-                player.graceEndMillis = now + Math.max(0, player.remainingTime) * 50L;
+            if (player == null || player.graceRemainingMillis != 0) continue;
+            if (player.graceEndMillis != null) {
+                // Absolute end time: whatever is left right now becomes the online budget.
+                player.graceRemainingMillis = Math.max(0, player.graceEndMillis - now);
+            } else if (player.remainingTime != null) {
+                // Ticks left -> milliseconds.
+                player.graceRemainingMillis = Math.max(0, player.remainingTime) * 50L;
             }
         }
     }
 
-    public static void save(Hardcore_grace_period plugin, boolean eventStarted, Map<UUID, Long> graceEnds) {
+    public static void save(Hardcore_grace_period plugin, boolean eventStarted, Map<UUID, Long> graceRemaining) {
         EventData data = new EventData();
         data.eventStarted = eventStarted;
-        for (Map.Entry<UUID, Long> entry : graceEnds.entrySet()) {
+        for (Map.Entry<UUID, Long> entry : graceRemaining.entrySet()) {
             data.players.put(entry.getKey().toString(), new PlayerData(entry.getValue()));
         }
         try {

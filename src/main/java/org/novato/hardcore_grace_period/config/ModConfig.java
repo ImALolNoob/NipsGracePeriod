@@ -31,6 +31,31 @@ public class ModConfig {
     public float deathSoundVolume = 0.6f;
     public float deathSoundPitch = 1.0f;
 
+    // ----- Resurrection altar -----
+    // Grace granted to a revived player (counts down online-only, like everyone else's).
+    public int altarRevivalGraceHours = 1;
+    public int altarRevivalGraceMinutes = 0;
+    // How many distinct item types the first offering asks for, and how many more each revival adds.
+    public int altarBaseItemTypes = 3;
+    public int altarItemTypesPerRevival = 1;
+    public int altarMaxItemTypes = 7;
+    // Per-type amount range for the first offering, before the per-revival growth below is applied.
+    public int altarBaseCountMin = 8;
+    public int altarBaseCountMax = 16;
+    // Each revival multiplies the amount range by (1 + revivalsDone * growth). 0.75 ~ roughly doubles by the 2nd.
+    public double altarCountGrowthPerRevival = 0.75;
+    // Hard cap so late tiers stay (barely) achievable.
+    public int altarMaxCountPerType = 512;
+    // Items the altar may ask for. A mix of valuable and tedious makes each offering feel random.
+    public java.util.List<String> altarMaterialPool = new java.util.ArrayList<>(java.util.List.of(
+        "DIAMOND", "IRON_INGOT", "GOLD_INGOT", "EMERALD", "COPPER_INGOT", "NETHERITE_SCRAP",
+        "ANCIENT_DEBRIS", "OBSIDIAN", "ENDER_PEARL", "BLAZE_ROD", "GHAST_TEAR", "GOLDEN_APPLE",
+        "EXPERIENCE_BOTTLE", "REDSTONE", "LAPIS_LAZULI", "QUARTZ", "GLOWSTONE_DUST", "SLIME_BALL",
+        "HONEY_BOTTLE", "GUNPOWDER", "STRING", "BONE", "ROTTEN_FLESH", "PHANTOM_MEMBRANE",
+        "PRISMARINE_CRYSTALS", "NAUTILUS_SHELL", "AMETHYST_SHARD", "ECHO_SHARD", "HONEYCOMB",
+        "SUGAR_CANE", "WHEAT", "LEATHER"
+    ));
+
     public static ModConfig load(Hardcore_grace_period plugin) {
         Path configPath = getConfigPath(plugin);
         if (Files.exists(configPath)) {
@@ -63,6 +88,11 @@ public class ModConfig {
 
     public long getGracePeriodMillis() {
         return (gracePeriodHours * 60L * 60L + gracePeriodMinutes * 60L) * 1000L;
+    }
+
+    /** Grace, in milliseconds, granted to a player revived at the altar. */
+    public long getAltarRevivalGraceMillis() {
+        return (altarRevivalGraceHours * 60L * 60L + altarRevivalGraceMinutes * 60L) * 1000L;
     }
 
     public String getFormattedGracePeriod() {

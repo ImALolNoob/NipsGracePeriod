@@ -12,7 +12,9 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
+import org.novato.hardcore_grace_period.AltarManager;
 import org.novato.hardcore_grace_period.GracePeriodManager;
 import org.novato.hardcore_grace_period.Hardcore_grace_period;
 
@@ -24,17 +26,19 @@ import java.util.stream.Collectors;
 
 public class GracePeriodCommands implements CommandExecutor, TabCompleter {
     private final GracePeriodManager manager;
+    private final AltarManager altar;
     /** Scheduled countdown steps; non-empty while a countdown is running. */
     private final List<BukkitTask> countdownTasks = new ArrayList<>();
 
-    public GracePeriodCommands(GracePeriodManager manager) {
+    public GracePeriodCommands(GracePeriodManager manager, AltarManager altar) {
         this.manager = manager;
+        this.altar = altar;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            sender.sendMessage(Component.text("Usage: /graceperiod <start|reset|check|set|add|addall|resetplayer>").color(NamedTextColor.YELLOW));
+            sender.sendMessage(Component.text("Usage: /graceperiod <start|reset|check|set|add|addall|resetplayer|revive|dead|altar>").color(NamedTextColor.YELLOW));
             return true;
         }
 
@@ -46,7 +50,10 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
             case "add" -> handleAdd(sender, args);
             case "addall" -> handleAddAll(sender, args);
             case "resetplayer" -> handleResetPlayer(sender, args);
-            default -> sender.sendMessage(Component.text("Unknown subcommand. Use: start, reset, check, set, add, addall, resetplayer").color(NamedTextColor.RED));
+            case "revive" -> handleRevive(sender, args);
+            case "dead" -> handleDead(sender);
+            case "altar" -> handleAltar(sender, args);
+            default -> sender.sendMessage(Component.text("Unknown subcommand. Use: start, reset, check, set, add, addall, resetplayer, revive, dead, altar").color(NamedTextColor.RED));
         }
         return true;
     }
@@ -100,7 +107,8 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
         countdownTasks.forEach(BukkitTask::cancel);
         countdownTasks.clear();
         manager.resetEvent();
-        sender.sendMessage(Component.text("Grace period event reset!").color(NamedTextColor.YELLOW));
+        altar.reset();
+        sender.sendMessage(Component.text("Grace period event reset! (altar progress, tier and fallen list cleared)").color(NamedTextColor.YELLOW));
     }
 
     private void handleCheck(CommandSender sender, String[] args) {
@@ -235,6 +243,62 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("Reset " + name + "'s grace period to " + manager.getConfig().getFormattedGracePeriod() + " from now").color(NamedTextColor.GREEN));
     }
 
+    private void handleRevive(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /graceperiod revive <player>").color(NamedTextColor.RED));
+            return;
+        }
+        OfflinePlayer target = findPlayer(sender, args[1]);
+        if (target == null) return;
+
+        String name = target.getName() != null ? target.getName() : args[1];
+        if (altar.forceRevive(target.getUniqueId())) {
+            sender.sendMessage(Component.text("Revived " + name + " with "
+                + manager.formatTime(manager.getConfig().getAltarRevivalGraceMillis()) + " of grace.").color(NamedTextColor.GREEN));
+        } else {
+            sender.sendMessage(Component.text(name + " isn't among the fallen.").color(NamedTextColor.RED));
+        }
+    }
+
+    private void handleDead(CommandSender sender) {
+        List<String> names = altar.deadNames();
+        if (names.isEmpty()) {
+            sender.sendMessage(Component.text("No one has fallen yet.").color(NamedTextColor.AQUA));
+            return;
+        }
+        sender.sendMessage(Component.text("Fallen (" + names.size() + "): ").color(NamedTextColor.AQUA)
+            .append(Component.text(String.join(", ", names), NamedTextColor.WHITE)));
+    }
+
+    private void handleAltar(CommandSender sender, String[] args) {
+        String sub = args.length >= 2 ? args[1].toLowerCase() : "";
+        switch (sub) {
+            case "set" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Component.text("Only a player can set the altar (look at the block first).").color(NamedTextColor.RED));
+                    return;
+                }
+                var block = player.getTargetBlockExact(6);
+                if (block == null) {
+                    sender.sendMessage(Component.text("Look at the block you want to use as the altar (within 6 blocks).").color(NamedTextColor.RED));
+                    return;
+                }
+                altar.setAltar(block.getLocation());
+                sender.sendMessage(Component.text("Altar set at " + block.getX() + ", " + block.getY() + ", " + block.getZ()
+                    + " (" + AltarManager.pretty(block.getType()) + ").").color(NamedTextColor.GREEN));
+            }
+            case "remove" -> {
+                altar.removeAltar();
+                sender.sendMessage(Component.text("Altar unregistered.").color(NamedTextColor.YELLOW));
+            }
+            case "reroll" -> {
+                altar.rerollOffering();
+                sender.sendMessage(Component.text("Rolled a fresh offering at the current tier (progress cleared).").color(NamedTextColor.GREEN));
+            }
+            default -> sender.sendMessage(Component.text("Usage: /graceperiod altar <set|remove|reroll>").color(NamedTextColor.RED));
+        }
+    }
+
     /**
      * Finds an online player, or an offline one who has played on this server before.
      * Resolution order: online exact match, then the name profile cache (fast path), then
@@ -270,15 +334,21 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 1) {
-            return Arrays.asList("start", "reset", "check", "set", "add", "addall", "resetplayer").stream()
+            return Arrays.asList("start", "reset", "check", "set", "add", "addall", "resetplayer", "revive", "dead", "altar").stream()
                 .filter(s -> s.startsWith(args[0].toLowerCase()))
                 .collect(Collectors.toList());
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("check") || args[0].equalsIgnoreCase("set")
-                || args[0].equalsIgnoreCase("add") || args[0].equalsIgnoreCase("resetplayer"))) {
+                || args[0].equalsIgnoreCase("add") || args[0].equalsIgnoreCase("resetplayer")
+                || args[0].equalsIgnoreCase("revive"))) {
             return Bukkit.getOnlinePlayers().stream()
                 .map(Player::getName)
                 .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
+                .collect(Collectors.toList());
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("altar")) {
+            return Arrays.asList("set", "remove", "reroll").stream()
+                .filter(s -> s.startsWith(args[1].toLowerCase()))
                 .collect(Collectors.toList());
         }
         return List.of();

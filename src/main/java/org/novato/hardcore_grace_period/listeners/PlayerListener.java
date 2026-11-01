@@ -14,14 +14,18 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.tag.DamageTypeTags;
+import org.novato.hardcore_grace_period.AltarManager;
 import org.novato.hardcore_grace_period.DeathAnnouncer;
 import org.novato.hardcore_grace_period.GracePeriodManager;
 import org.novato.hardcore_grace_period.Hardcore_grace_period;
@@ -33,12 +37,14 @@ import java.util.UUID;
 
 public class PlayerListener implements Listener {
     private final GracePeriodManager manager;
+    private final AltarManager altarManager;
     private final Hardcore_grace_period plugin;
     private final Set<UUID> pendingGraceRespawn = new HashSet<>();
     private final DeathAnnouncer deathAnnouncer;
 
-    public PlayerListener(GracePeriodManager manager, Hardcore_grace_period plugin) {
+    public PlayerListener(GracePeriodManager manager, AltarManager altarManager, Hardcore_grace_period plugin) {
         this.manager = manager;
+        this.altarManager = altarManager;
         this.plugin = plugin;
         this.deathAnnouncer = new DeathAnnouncer(manager.getConfig());
         // Grace is real time, so checking once a second is enough for boss bars and expiry
@@ -51,6 +57,24 @@ public class PlayerListener implements Listener {
         if (manager.isEventStarted()) {
             manager.initializePlayer(player);
         }
+        // A player revived at the altar while they were offline comes back to life on join.
+        if (altarManager.consumePendingRevive(player.getUniqueId())) {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (player.isOnline()) altarManager.reviveNow(player);
+            });
+        }
+    }
+
+    // Right-clicking the registered altar block offers the item in hand.
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onAltarInteract(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        if (event.getHand() != EquipmentSlot.HAND) return; // only the main hand, once per click
+        Block clicked = event.getClickedBlock();
+        if (clicked == null || !altarManager.isAltar(clicked.getLocation())) return;
+
+        event.setCancelled(true); // don't open/place against the altar block
+        altarManager.handleDonation(event.getPlayer());
     }
 
     @EventHandler
@@ -84,6 +108,7 @@ public class PlayerListener implements Listener {
         if (!manager.hasGracePeriod(player.getUniqueId())) {
             // No grace left: this death is permanent
             if (!event.isCancelled()) {
+                altarManager.markDead(player.getUniqueId());
                 deathAnnouncer.announce(player);
             }
             return;

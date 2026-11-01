@@ -7,10 +7,17 @@ authors:
   - Novato
 commands:
   graceperiod:
-    description: Manage the grace period event
-    usage: /graceperiod <start|reset|check|set|add|addall|resetplayer>
+    description: Manage the grace period event and resurrection altar
+    usage: /graceperiod <start|reset|check|set|add|addall|resetplayer|revive|dead|altar>
     permission: graceperiod.admin
+  altar:
+    description: Show what the resurrection altar currently needs
+    usage: /altar
+    permission: graceperiod.altar
 permissions:
   graceperiod.admin:
     description: Allows management of grace period commands
     default: op
+  graceperiod.altar:
+    description: Allows viewing altar status with /altar
+    default: true

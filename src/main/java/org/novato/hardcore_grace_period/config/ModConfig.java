@@ -36,16 +36,17 @@ public class ModConfig {
     public int altarRevivalGraceHours = 1;
     public int altarRevivalGraceMinutes = 0;
     // How many distinct item types the first offering asks for, and how many more each revival adds.
-    public int altarBaseItemTypes = 3;
+    public int altarBaseItemTypes = 4;
     public int altarItemTypesPerRevival = 1;
-    public int altarMaxItemTypes = 7;
+    public int altarMaxItemTypes = 8;
     // Per-type amount range for the first offering, before the per-revival growth below is applied.
-    public int altarBaseCountMin = 8;
-    public int altarBaseCountMax = 16;
-    // Each revival multiplies the amount range by (1 + revivalsDone * growth). 0.75 ~ roughly doubles by the 2nd.
-    public double altarCountGrowthPerRevival = 0.75;
-    // Hard cap so late tiers stay (barely) achievable.
-    public int altarMaxCountPerType = 512;
+    // Deliberately large: a single revival should take the whole server pitching in (96-256 = up to 4 stacks each).
+    public int altarBaseCountMin = 96;
+    public int altarBaseCountMax = 256;
+    // Each revival multiplies the amount range by (1 + revivalsDone * growth). 1.0 = the 2nd costs 2x, 3rd 3x, 4th 4x...
+    public double altarCountGrowthPerRevival = 1.0;
+    // Hard cap per item type so late tiers stay (barely) achievable (3456 = a full double chest of stacks).
+    public int altarMaxCountPerType = 3456;
     // Items the altar may ask for. A mix of valuable and tedious makes each offering feel random.
     public java.util.List<String> altarMaterialPool = new java.util.ArrayList<>(java.util.List.of(
         "DIAMOND", "IRON_INGOT", "GOLD_INGOT", "EMERALD", "COPPER_INGOT", "NETHERITE_SCRAP",

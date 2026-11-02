@@ -28,9 +28,14 @@ public class AltarData {
         public Integer altarX;
         public Integer altarY;
         public Integer altarZ;
+        /** UUID of the armor-stand altar, if one is used instead of a block; null otherwise. */
+        public String altarEntity;
 
         /** How many players have been revived so far. Drives the difficulty tier. */
         public int revivalsDone;
+
+        /** Name of the most recently revived player, shown on the altar hologram. */
+        public String lastRevived;
 
         /** The current offering: material name -> amount required. */
         public Map<String, Integer> offering = new HashMap<>();

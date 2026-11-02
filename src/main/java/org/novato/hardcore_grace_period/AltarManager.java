@@ -1,10 +1,12 @@
 package org.novato.hardcore_grace_period;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -12,7 +14,12 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Display;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.novato.hardcore_grace_period.config.ModConfig;
 import org.novato.hardcore_grace_period.data.AltarData;
@@ -42,11 +49,14 @@ public class AltarManager {
     /** Materials the altar may ask for, resolved from config once at load. */
     private final List<Material> materialPool = new ArrayList<>();
 
-    private boolean hasAltar = false;
+    private boolean hasBlockAltar = false;
     private String altarWorld;
     private int altarX;
     private int altarY;
     private int altarZ;
+    /** UUID of the armor-stand altar, if one is used instead of a block; null otherwise. */
+    private UUID altarEntityId;
+    private static final String ALTAR_TAG = "hgp_altar_stand";
 
     /** Number of revivals completed — the difficulty tier. */
     private int revivalsDone = 0;
@@ -58,6 +68,12 @@ public class AltarManager {
     private final Set<UUID> deadPlayers = new java.util.HashSet<>();
     private final Set<UUID> pendingRevive = new java.util.HashSet<>();
 
+    /** Name of the most recently revived player (for the hologram); null until the first revival. */
+    private String lastRevivedName;
+    /** The floating text display above the altar; recreated as needed. */
+    private TextDisplay hologram;
+    private static final String HOLOGRAM_TAG = "hgp_altar_hologram";
+
     public AltarManager(Hardcore_grace_period plugin, GracePeriodManager graceManager) {
         this.plugin = plugin;
         this.graceManager = graceManager;
@@ -68,8 +84,15 @@ public class AltarManager {
             generateOffering();
             saveData();
         }
-        // Gentle ambient particles so the altar always looks alive.
-        plugin.getServer().getScheduler().runTaskTimer(plugin, this::playAmbientEffect, 40L, 12L);
+        // Keep the hologram alive and refreshed, and run the ambient particles.
+        plugin.getServer().getScheduler().runTaskTimer(plugin, this::altarTick, 40L, 12L);
+    }
+
+    /** Runs a few times a second: ensures the hologram exists, refreshes its text, and shows ambient particles. */
+    private void altarTick() {
+        ensureHologram();
+        updateHologram();
+        playAmbientEffect();
     }
 
     private void buildMaterialPool() {
@@ -89,41 +112,112 @@ public class AltarManager {
         }
     }
 
-    // ----- Altar block registration -----
+    // ----- Altar registration (a block, or a protected armor stand) -----
 
     public void setAltar(Location loc) {
-        this.hasAltar = true;
+        removeHologram(); // drop any hologram tied to the old spot
+        removeAltarStand(); // switching to a block altar — clear any armor-stand altar
+        this.hasBlockAltar = true;
         this.altarWorld = loc.getWorld().getName();
         this.altarX = loc.getBlockX();
         this.altarY = loc.getBlockY();
         this.altarZ = loc.getBlockZ();
         saveData();
+        ensureHologram();
+    }
+
+    /** Spawns a protected, decorative armor stand at {@code loc} and makes it the altar. */
+    public void spawnAltarStand(Location loc) {
+        removeHologram();
+        removeAltarStand();     // remove a previous stand if any
+        this.hasBlockAltar = false;
+        World w = loc.getWorld();
+        Location at = loc.clone();
+        at.setY(Math.floor(at.getY()));
+        at.setPitch(0);           // keep it upright
+        // keep loc's yaw so the stand faces the direction the player is looking
+        ArmorStand stand = w.spawn(at, ArmorStand.class, s -> {
+            s.addScoreboardTag(ALTAR_TAG);
+            s.setInvulnerable(true);   // immune to all damage
+            s.setGravity(false);       // never falls or gets pushed down
+            s.setPersistent(true);     // saved with the world
+            s.setCanMove(false);
+            s.setCustomNameVisible(false);
+            s.setArms(true);
+            s.setBasePlate(true);
+            // Lock every slot so nobody can take or change its gear.
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                s.addEquipmentLock(slot, ArmorStand.LockType.ADDING_OR_CHANGING);
+                s.addEquipmentLock(slot, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            }
+        });
+        this.altarEntityId = stand.getUniqueId();
+        saveData();
+        ensureHologram();
     }
 
     public void removeAltar() {
-        this.hasAltar = false;
+        this.hasBlockAltar = false;
+        removeAltarStand();
+        removeHologram();
         saveData();
     }
 
-    public boolean hasAltar() {
-        return hasAltar;
+    /** Removes the armor-stand altar entity (if present) and forgets it. */
+    private void removeAltarStand() {
+        if (altarEntityId != null) {
+            Entity e = Bukkit.getEntity(altarEntityId);
+            if (e != null) e.remove();
+            altarEntityId = null;
+        }
     }
 
-    /** The registered altar block location, or null if none is set (or its world isn't loaded). */
+    /** True if any altar (block or armor stand) is configured. */
+    public boolean hasAltar() {
+        return hasBlockAltar || altarEntityId != null;
+    }
+
+    /** True if this altar is an armor stand (vs. a block). */
+    public boolean isArmorStandAltar() {
+        return altarEntityId != null;
+    }
+
+    /** The altar's reference location (block corner, or the stand's position); null if unresolved. */
     public Location getAltarLocation() {
-        if (!hasAltar) return null;
-        World w = Bukkit.getWorld(altarWorld);
-        if (w == null) return null;
-        return new Location(w, altarX, altarY, altarZ);
+        if (altarEntityId != null) {
+            Entity e = Bukkit.getEntity(altarEntityId);
+            return (e != null && e.isValid()) ? e.getLocation() : null;
+        }
+        if (hasBlockAltar) {
+            World w = Bukkit.getWorld(altarWorld);
+            if (w == null) return null;
+            return new Location(w, altarX, altarY, altarZ);
+        }
+        return null;
+    }
+
+    /** The point effects and the hologram are centered on; null if the altar is unresolved. */
+    private Location altarCenter() {
+        Location base = getAltarLocation();
+        if (base == null || base.getWorld() == null) return null;
+        if (altarEntityId != null) {
+            return base.clone().add(0, 1.0, 0); // around the stand's upper body
+        }
+        return base.clone().add(0.5, 1.0, 0.5); // center of the block, one above
     }
 
     public boolean isAltar(Location blockLoc) {
-        return hasAltar
+        return hasBlockAltar
             && blockLoc.getWorld() != null
             && blockLoc.getWorld().getName().equals(altarWorld)
             && blockLoc.getBlockX() == altarX
             && blockLoc.getBlockY() == altarY
             && blockLoc.getBlockZ() == altarZ;
+    }
+
+    /** True if the given entity is the armor-stand altar. */
+    public boolean isAltarEntity(Entity entity) {
+        return altarEntityId != null && entity != null && entity.getUniqueId().equals(altarEntityId);
     }
 
     // ----- Death tracking -----
@@ -132,6 +226,7 @@ public class AltarManager {
     public void markDead(UUID uuid) {
         if (deadPlayers.add(uuid)) {
             saveData();
+            updateHologram();
         }
     }
 
@@ -243,7 +338,9 @@ public class AltarManager {
                 reviveNow(online);            // pops them in on top of the altar
             }
             // If they're offline, they stay queued and spawn at the altar on their next login (once).
+            lastRevivedName = name;
             saveData();
+            updateHologram();
             announceReturned(name);
         });
     }
@@ -285,9 +382,10 @@ public class AltarManager {
     }
 
     private Location revivalLocation(Player player) {
-        Location altar = getAltarLocation();
-        if (altar != null) {
-            return altar.clone().add(0.5, 1, 0.5);
+        Location base = getAltarLocation();
+        if (base != null && base.getWorld() != null) {
+            // On top of the stand, or on top of the altar block.
+            return isArmorStandAltar() ? base.clone().add(0, 1, 0) : base.clone().add(0.5, 1, 0.5);
         }
         World overworld = Bukkit.getWorld("world");
         World world = overworld != null ? overworld : player.getWorld();
@@ -312,6 +410,79 @@ public class AltarManager {
         }
     }
 
+    // ----- Hologram (native Text Display entity, no extra plugin needed) -----
+
+    /** Spawns the floating text display if the altar is set and one isn't already present. */
+    private void ensureHologram() {
+        Location center = altarCenter();
+        if (center == null) {
+            removeHologram();
+            return;
+        }
+        if (hologram != null && hologram.isValid() && !hologram.isDead()) return;
+
+        World w = center.getWorld();
+        Location at = center.clone().add(0, 1.3, 0); // float it above the altar/stand
+        // Remove any leftover holograms near the altar (e.g. from a previous run).
+        for (Entity e : w.getNearbyEntities(at, 2, 3, 2)) {
+            if (e instanceof TextDisplay && e.getScoreboardTags().contains(HOLOGRAM_TAG)) {
+                e.remove();
+            }
+        }
+        hologram = w.spawn(at, TextDisplay.class, td -> {
+            td.addScoreboardTag(HOLOGRAM_TAG);
+            td.setBillboard(Display.Billboard.CENTER);   // always faces the viewer
+            td.setAlignment(TextDisplay.TextAlignment.CENTER);
+            td.setSeeThrough(false);
+            td.setShadowed(true);
+            td.setPersistent(false);                     // not saved to the world; we respawn as needed
+            td.setBackgroundColor(Color.fromARGB(140, 10, 0, 20));
+            td.text(buildHologramText());
+        });
+    }
+
+    private void updateHologram() {
+        if (hologram != null && hologram.isValid()) {
+            hologram.text(buildHologramText());
+        }
+    }
+
+    private void removeHologram() {
+        if (hologram != null) {
+            hologram.remove();
+            hologram = null;
+        }
+    }
+
+    /** The multi-line text shown on the altar hologram. */
+    private Component buildHologramText() {
+        java.util.List<Component> lines = new ArrayList<>();
+        lines.add(Component.text("✦ Altar of Rebirth ✦").color(NamedTextColor.LIGHT_PURPLE).decorate(TextDecoration.BOLD));
+        lines.add(Component.text("Fallen: ", NamedTextColor.GRAY)
+            .append(Component.text(deadCount(), deadCount() > 0 ? NamedTextColor.AQUA : NamedTextColor.DARK_GRAY))
+            .append(Component.text("    Revived: ", NamedTextColor.GRAY))
+            .append(Component.text(revivalsDone, NamedTextColor.GREEN)));
+        lines.add(Component.text("Last reborn: ", NamedTextColor.GRAY)
+            .append(Component.text(lastRevivedName == null ? "—" : lastRevivedName, NamedTextColor.WHITE)));
+
+        if (deadCount() == 0) {
+            lines.add(Component.empty());
+            lines.add(Component.text("Dormant — no fallen to revive.").color(NamedTextColor.DARK_GRAY).decorate(TextDecoration.ITALIC));
+        } else {
+            lines.add(Component.empty());
+            lines.add(Component.text("Offering needed:").color(NamedTextColor.YELLOW));
+            for (Map.Entry<Material, Integer> entry : offering.entrySet()) {
+                int have = donated.getOrDefault(entry.getKey(), 0);
+                int need = entry.getValue();
+                boolean done = have >= need;
+                lines.add(Component.text("• ", NamedTextColor.DARK_GRAY)
+                    .append(Component.text(pretty(entry.getKey()) + ": ", NamedTextColor.WHITE))
+                    .append(Component.text(have + "/" + need, done ? NamedTextColor.GREEN : NamedTextColor.RED)));
+            }
+        }
+        return Component.join(JoinConfiguration.newlines(), lines);
+    }
+
     // ----- Particle effects (all native Paper API, no extra plugin needed) -----
 
     /**
@@ -329,10 +500,9 @@ public class AltarManager {
 
     /** Soft swirling particles at the altar every tick-batch; a little stronger when souls await rebirth. */
     private void playAmbientEffect() {
-        Location altar = getAltarLocation();
-        if (altar == null || altar.getWorld() == null) return;
-        World w = altar.getWorld();
-        Location c = altar.clone().add(0.5, 1.0, 0.5);
+        Location c = altarCenter();
+        if (c == null) return;
+        World w = c.getWorld();
         particle(w, Particle.ENCHANT, c, 6, 0.4, 0.6, 0.4, 0.4);
         particle(w, Particle.PORTAL, c, 5, 0.3, 0.5, 0.3, 0.3);
         if (!deadPlayers.isEmpty()) {
@@ -344,10 +514,9 @@ public class AltarManager {
 
     /** A small sparkle burst when someone makes an offering. */
     private void playDonationEffect() {
-        Location altar = getAltarLocation();
-        if (altar == null || altar.getWorld() == null) return;
-        World w = altar.getWorld();
-        Location c = altar.clone().add(0.5, 1.0, 0.5);
+        Location c = altarCenter();
+        if (c == null) return;
+        World w = c.getWorld();
         particle(w, Particle.HAPPY_VILLAGER, c, 12, 0.4, 0.6, 0.4, 0);
         particle(w, Particle.END_ROD, c, 10, 0.3, 0.5, 0.3, 0.05);
         particle(w, Particle.WITCH, c, 8, 0.4, 0.6, 0.4, 0);
@@ -360,17 +529,16 @@ public class AltarManager {
      * actually brought back. Harmless (the lightning does no damage).
      */
     private void startChargeUpShow(Runnable onComplete) {
-        Location altar = getAltarLocation();
-        if (altar == null || altar.getWorld() == null) {
+        final Location base = altarCenter();
+        if (base == null) {
             // No altar to animate — just bring them back immediately so nothing gets stuck.
             onComplete.run();
             return;
         }
-        final World w = altar.getWorld();
-        final Location base = altar.clone().add(0.5, 1.0, 0.5);
+        final World w = base.getWorld();
 
         // Opening beat.
-        w.strikeLightningEffect(altar.clone().add(0.5, 0, 0.5)); // visual only — no fire, no damage
+        w.strikeLightningEffect(base.clone().subtract(0, 1.0, 0)); // visual only — no fire, no damage
         particle(w, Particle.EXPLOSION, base, 1, 0, 0, 0, 0);
 
         final int durationTicks = 200; // ~10 seconds
@@ -459,6 +627,7 @@ public class AltarManager {
     public boolean forceRevive(UUID uuid) {
         if (!deadPlayers.remove(uuid)) return false;
         graceManager.setPlayerTime(uuid, config.getAltarRevivalGraceMillis());
+        lastRevivedName = resolveName(uuid);
         Player online = Bukkit.getPlayer(uuid);
         if (online != null && online.isOnline()) {
             reviveNow(online);
@@ -466,6 +635,7 @@ public class AltarManager {
             pendingRevive.add(uuid);
         }
         saveData();
+        updateHologram();
         return true;
     }
 
@@ -514,19 +684,33 @@ public class AltarManager {
         deadPlayers.clear();
         pendingRevive.clear();
         donated.clear();
+        lastRevivedName = null;
         generateOffering();
         saveData();
+        updateHologram();
+    }
+
+    /** Called on plugin disable: drops the floating hologram (it is not saved to the world). */
+    public void shutdown() {
+        removeHologram();
     }
 
     private void loadData() {
         AltarData.StateData d = AltarData.load(plugin);
         this.revivalsDone = Math.max(0, d.revivalsDone);
+        this.lastRevivedName = d.lastRevived;
         if (d.altarWorld != null && d.altarX != null && d.altarY != null && d.altarZ != null) {
-            this.hasAltar = true;
+            this.hasBlockAltar = true;
             this.altarWorld = d.altarWorld;
             this.altarX = d.altarX;
             this.altarY = d.altarY;
             this.altarZ = d.altarZ;
+        }
+        if (d.altarEntity != null) {
+            try {
+                this.altarEntityId = UUID.fromString(d.altarEntity);
+                this.hasBlockAltar = false; // an armor-stand altar takes precedence
+            } catch (IllegalArgumentException ignored) {}
         }
         for (Map.Entry<String, Integer> e : d.offering.entrySet()) {
             Material m = Material.matchMaterial(e.getKey());
@@ -547,11 +731,15 @@ public class AltarManager {
     public void saveData() {
         AltarData.StateData d = new AltarData.StateData();
         d.revivalsDone = revivalsDone;
-        if (hasAltar) {
+        d.lastRevived = lastRevivedName;
+        if (hasBlockAltar) {
             d.altarWorld = altarWorld;
             d.altarX = altarX;
             d.altarY = altarY;
             d.altarZ = altarZ;
+        }
+        if (altarEntityId != null) {
+            d.altarEntity = altarEntityId.toString();
         }
         for (Map.Entry<Material, Integer> e : offering.entrySet()) {
             d.offering.put(e.getKey().name(), e.getValue());

@@ -18,6 +18,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -88,6 +90,31 @@ public class PlayerListener implements Listener {
 
         event.setCancelled(true); // don't open/place against the altar block
         altarManager.handleDonation(event.getPlayer());
+    }
+
+    // Right-clicking the armor-stand altar offers the item in hand.
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onAltarEntityInteract(PlayerInteractAtEntityEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        if (!altarManager.isAltarEntity(event.getRightClicked())) return;
+        event.setCancelled(true); // never let anyone equip/manipulate the altar stand
+        altarManager.handleDonation(event.getPlayer());
+    }
+
+    // The altar stand can't be edited (armor swapped in/out).
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onAltarStandManipulate(PlayerArmorStandManipulateEvent event) {
+        if (altarManager.isAltarEntity(event.getRightClicked())) {
+            event.setCancelled(true);
+        }
+    }
+
+    // The altar stand can't be broken or damaged by anything (players, mobs, explosions, fire).
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onAltarDamage(EntityDamageEvent event) {
+        if (altarManager.isAltarEntity(event.getEntity())) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler

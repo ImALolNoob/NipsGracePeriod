@@ -35,6 +35,7 @@ public class Hardcore_grace_period extends JavaPlugin {
         }
         if (altarManager != null) {
             altarManager.saveData();
+            altarManager.shutdown();
         }
         getLogger().info("Hardcore Grace Period disabled!");
     }

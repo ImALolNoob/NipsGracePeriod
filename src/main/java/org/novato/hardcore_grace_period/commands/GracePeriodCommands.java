@@ -287,6 +287,14 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Component.text("Altar set at " + block.getX() + ", " + block.getY() + ", " + block.getZ()
                     + " (" + AltarManager.pretty(block.getType()) + ").").color(NamedTextColor.GREEN));
             }
+            case "spawn" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Component.text("Only a player can spawn the altar stand (it appears where you're standing).").color(NamedTextColor.RED));
+                    return;
+                }
+                altar.spawnAltarStand(player.getLocation());
+                sender.sendMessage(Component.text("Spawned a protected armor-stand altar at your feet. It can't be broken or edited.").color(NamedTextColor.GREEN));
+            }
             case "remove" -> {
                 altar.removeAltar();
                 sender.sendMessage(Component.text("Altar unregistered.").color(NamedTextColor.YELLOW));
@@ -295,7 +303,7 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
                 altar.rerollOffering();
                 sender.sendMessage(Component.text("Rolled a fresh offering at the current tier (progress cleared).").color(NamedTextColor.GREEN));
             }
-            default -> sender.sendMessage(Component.text("Usage: /graceperiod altar <set|remove|reroll>").color(NamedTextColor.RED));
+            default -> sender.sendMessage(Component.text("Usage: /graceperiod altar <set|spawn|remove|reroll>").color(NamedTextColor.RED));
         }
     }
 
@@ -347,7 +355,7 @@ public class GracePeriodCommands implements CommandExecutor, TabCompleter {
                 .collect(Collectors.toList());
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("altar")) {
-            return Arrays.asList("set", "remove", "reroll").stream()
+            return Arrays.asList("set", "spawn", "remove", "reroll").stream()
                 .filter(s -> s.startsWith(args[1].toLowerCase()))
                 .collect(Collectors.toList());
         }
